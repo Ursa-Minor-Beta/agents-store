@@ -16,7 +16,7 @@
           "schema": {
             "url": {
               "type": "string",
-              "required": true,
+              "required": false,
               "default": "https://test.ai/"
             },
             "jiraId": {
@@ -30,7 +30,7 @@
             },
             "baasHost": {
               "type": "string",
-              "required": true,
+              "required": false,
               "default": "http://host.docker.internal:8090"
             }
           }
