@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-10-07T16:28:23.850Z",
+  "exportedAt": "2026-10-09T11:05:37.658Z",
   "workspace": {
-    "name": "QA",
+    "name": "QA (ursa-repo)",
     "description": "Workspace for testing and QA agents"
   },
   "agent": {
@@ -16,7 +16,7 @@
           "schema": {
             "url": {
               "type": "string",
-              "required": false,
+              "required": true,
               "default": "https://test.ai/"
             },
             "jiraId": {
@@ -30,7 +30,7 @@
             },
             "baasHost": {
               "type": "string",
-              "required": false,
+              "required": true,
               "default": "http://host.docker.internal:8090"
             }
           }
@@ -151,7 +151,7 @@
           "tools": [
             {
               "type": "agent",
-              "agentId": "6ac3ddfa1a37f5ab2a129e29",
+              "agentId": "6ac753cb0a91d6f32226134b",
               "name": "step_execution_v2",
               "description": "single test step execution tool",
               "parameters": {
@@ -307,7 +307,7 @@
         }
       }
     ],
-    "originalId": "6ac3ddfa1a37f5ab2a129e2c"
+    "originalId": "6ac753cb0a91d6f32226134d"
   },
   "dependencies": [
     {
@@ -574,7 +574,7 @@
           }
         }
       ],
-      "originalId": "6ac3ddfa1a37f5ab2a129e29"
+      "originalId": "6ac753cb0a91d6f32226134b"
     }
   ],
   "collections": [
