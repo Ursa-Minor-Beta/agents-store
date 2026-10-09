@@ -1,11 +1,12 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-10-09T11:05:37.658Z",
+  "exportedAt": "2026-10-09T13:13:34.062Z",
   "workspace": {
     "name": "QA (ursa-repo)",
     "description": "Workspace for testing and QA agents"
   },
   "agent": {
+    "refId": "test-orchestrator",
     "name": "Test Orchestrator",
     "description": "Generates test steps from a Jira ticket and executes them sequentially via the Test Step Executor sub-agent",
     "nodes": [
@@ -151,7 +152,7 @@
           "tools": [
             {
               "type": "agent",
-              "agentId": "6ac753cb0a91d6f32226134b",
+              "agentId": "test-step-executor",
               "name": "step_execution_v2",
               "description": "single test step execution tool",
               "parameters": {
@@ -306,11 +307,11 @@
           "value": "{{node:orchestrator.toolCalls}}"
         }
       }
-    ],
-    "originalId": "6ac753cb0a91d6f32226134d"
+    ]
   },
   "dependencies": [
     {
+      "refId": "test-step-executor",
       "name": "Test Step Executor",
       "description": "Executes a single test step using BaaS, generates browser code, and evaluates the result",
       "nodes": [
@@ -573,8 +574,7 @@
             "Result_screenshot": "{{node:http-3.response.screenshots.screenshot}}"
           }
         }
-      ],
-      "originalId": "6ac753cb0a91d6f32226134b"
+      ]
     }
   ],
   "collections": [
