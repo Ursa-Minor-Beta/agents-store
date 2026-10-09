@@ -1,0 +1,1042 @@
+{
+  "version": "1.0",
+  "exportedAt": "2026-10-09T08:20:52.935Z",
+  "workspace": {
+    "name": "Jira_ticket_new",
+    "description": ""
+  },
+  "agent": {
+    "name": "Jira \"In Testing\" Ticket Runner v1",
+    "description": "Fetches Jira tickets assigned to me with status \"In Testing\" and runs the Jira Bug → Test Steps Runner sub-agent for each one, then summarizes the results.",
+    "nodes": [
+      {
+        "id": "input-1",
+        "type": "input",
+        "data": {
+          "schema": {
+            "url": {
+              "type": "string",
+              "required": false,
+              "default": "https://google.com/"
+            },
+            "jiraEmail": {
+              "type": "string",
+              "required": false,
+              "default": "test@user.com"
+            },
+            "jiraHost": {
+              "type": "string",
+              "required": false,
+              "default": "https://something.atlassian.net"
+            }
+          }
+        }
+      },
+      {
+        "id": "http-1",
+        "type": "http",
+        "data": {
+          "method": "GET",
+          "url": "{{node:input-1.jiraHost}}/rest/api/3/search/jql?jql=assignee%3DcurrentUser()%20AND%20status%3D%22In%20Testing%22&maxResults=40&fields=summary,status",
+          "headers": {
+            "Authorization": "Basic {{secret:Jira_auth}}",
+            "Accept": "application/json"
+          }
+        }
+      },
+      {
+        "id": "js-1",
+        "type": "js",
+        "data": {
+          "input": "{{node:http-1.response}}",
+          "code": "const issues = (input && input.issues) || []; output = issues.map(i => ({ key: i.key, summary: i.fields && i.fields.summary }));"
+        }
+      },
+      {
+        "id": "llm-1",
+        "type": "llm",
+        "data": {
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "systemPrompt": "You are an orchestrator that processes a list of Jira tickets. For each ticket in the provided list, call the run_test_for_ticket tool exactly once, passing the ticket's key as jiraId along with the given url and jiraEmail. Process tickets one by one, just one at a time, waiting for each tool result before moving to the next. Once all tickets have been processed, produce a clear summary report listing each ticket key and the outcome returned by the tool. If the list is empty, simply report that there are no tickets in 'In Testing' status.",
+          "userPrompt": "Jira tickets to test (JSON array of {key, summary}):\n{{node:js-1.output}}\n\nFor every ticket in the list above, call the tool `run_test_for_ticket` with:\n- jiraId: the ticket's key\n- url: {{node:input-1.url}}\n- jiraEmail: {{node:input-1.jiraEmail}}\n\nAfter processing all tickets, respond with a concise summary of results per ticket.",
+          "temperature": 0.2,
+          "maxTokens": 32000,
+          "maxToolCalls": 50,
+          "tools": [
+            {
+              "type": "agent",
+              "agentId": "6ac4df8fbf1198b608a36017",
+              "name": "run_test_for_ticket",
+              "description": "Runs the Jira Bug -> Test Steps Runner sub-agent against a given Jira issue to execute its test steps on a staging environment.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "jiraId": {
+                    "type": "string",
+                    "description": "The Jira issue key, e.g. PROJ-123"
+                  },
+                  "url": {
+                    "type": "string",
+                    "description": "Staging URL to run the test steps against"
+                  },
+                  "jiraEmail": {
+                    "type": "string",
+                    "description": "Jira account email to associate with the run"
+                  }
+                },
+                "required": [
+                  "jiraId"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "output-1",
+        "type": "output",
+        "data": {
+          "ticketsFound": "{{node:js-1.output}}",
+          "summary": "{{node:llm-1.response}}"
+        }
+      }
+    ],
+    "originalId": "6ac543d3d737deb76568ff57"
+  },
+  "dependencies": [
+    {
+      "name": "step_execution_v4",
+      "description": "single test step execution tool",
+      "nodes": [
+        {
+          "id": "input-1",
+          "type": "input",
+          "data": {
+            "schema": {
+              "sessionID": {
+                "type": "string",
+                "required": true
+              },
+              "testStepDescription": {
+                "type": "string",
+                "required": true
+              },
+              "testStepExpectedResult": {
+                "type": "string",
+                "required": true
+              }
+            }
+          }
+        },
+        {
+          "id": "http-1",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/message",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"program\":\"takeScreenshot('screenshot', 'timeout:10s'); innerHtml('body', 'timeout:10s')\", \"sessionID\": \"{{node:input-1.sessionID}}\", \"stopSession\": false}",
+            "persistedFields": [
+              "body",
+              "sseEvents"
+            ]
+          }
+        },
+        {
+          "id": "js-2",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-1.response}}",
+            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
+          }
+        },
+        {
+          "id": "http-2",
+          "type": "http",
+          "data": {
+            "method": "GET",
+            "url": "http://host.docker.internal:8090/api/async/actions",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            }
+          }
+        },
+        {
+          "id": "llm-0",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 1: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 2: Search memory for existing test steps\n\nCall the `memory_search` tool with:\n\n- collection: `test_steps`\n- `page`: the page name you chose in Step 1\nYou MUST call this tool before producing any output.\n\n**Search rules:**\n\n- `Click the value` and `Enter something into the value` are different actions\n\n## Step 3: Check for a matching step\n\nCompare each result's `stepDescription` and `stepExpectedResult` with the Task and Expectations.\nA result counts as a match only if ALL of these are true:\n\n- It performs the same user action on the same type of element (e.g., clicking \"Raise Issue\" on a to-do).\n- Operates with the same data type and value\n- It verifies the same outcome described in the Expectations.\nDifferences in wording do not prevent a match. A different action or a different expected outcome does.\n- If a match exists: use that result's `stepDescription`, `stepExpectedResult`, and `page` exactly as you get it from memory, and set `from_memory` to `true`. If several match, use the closest one.\n- Important: when `from_memory: true`, the stepDescription and stepExpectedResult you return should be exactly as they are in memory!\n- If there is no match, or the search returns no results or an error: go to Step 4.\n\n## Step 4: Write a new test step (only if there is no match)\n\nWrite one test step and one expected result that verify the Task. Set `from_memory` to `false` and `page` to the value from Step 1.\nThe step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nThe expected result MUST describe an observable UI change that confirms the fix, naming the specific element and its new state.\n\n# EOS platform behavior rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n\n# Output format\n\nRespond with ONLY a single JSON object. Do not add any text, explanation, or markdown code fences before or after it.\nThe object must have exactly these 4 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen if the bug is fixed.\n- \"page\" (string): the starting page, one value from the list in Step 1.\n- \"from\\_memory\" (boolean): true if the step came from `memory_search`, otherwise false.\n\n# Examples\n\n## Bad (too vague: says \"one of the to-dos\" and does not describe a visible change)\n\n{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"page\": \"Active Meeting\", \"from\\_memory\": false}\n\n## Good (names the exact item and the exact visible change)\n\n{\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"page\": \"Active Meeting\", \"from\\_memory\": false}\n\n# Final reminders\n\n- Always call `memory_search` before answering.\n- \"page\" must be exactly one value from the list in Step 1.\n- \"from\\_memory\" must be a JSON boolean (true or false), not a string.\n- Output only the JSON object and nothing else.\n\n",
+            "userPrompt": "<task> {{node:input-1.testStepDescription}}</task>\n<expectations> {{node:input-1.testStepExpectedResult}}</expectations>\n <screenshot>: {{node:js-2.output.screenshots.screenshot}} </screenshot>",
+            "temperature": 0.7,
+            "maxTokens": 10000,
+            "tools": [
+              {
+                "type": "builtin",
+                "name": "memory_search"
+              }
+            ],
+            "maxToolCalls": 2,
+            "persistedFields": [
+              "userPrompt"
+            ]
+          }
+        },
+        {
+          "id": "js-0",
+          "type": "js",
+          "data": {
+            "input": "{{node:llm-0.response}}",
+            "code": "if (typeof input === 'string') { const cleanString = input.replace(/\\n/g, ''); try {  output = JSON.parse(cleanString);} catch (e) {  output = { error: 'Invalid JSON format', details: e.message };  }} else if (input && typeof input === 'object') { output = input; } else { output = { error: 'Unsupported input type', details: typeof input };}"
+          }
+        },
+        {
+          "id": "branch-deside",
+          "type": "branch",
+          "data": {
+            "input": "{{node:js-0.output}}",
+            "branches": [
+              {
+                "name": "found",
+                "condition": "input.from_memory === true",
+                "nodes": [
+                  "memory-search-1",
+                  "memory-delete-1"
+                ]
+              },
+              {
+                "name": "create",
+                "condition": "input.from_memory === false",
+                "nodes": [
+                  "llm-1",
+                  "memory-store-1"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "memory-search-1",
+          "type": "memory-search",
+          "data": {
+            "collection": "test_steps",
+            "filters": {
+              "page": "{{node:js-0.output.page}}",
+              "stepDescription": "{{node:js-0.output.stepDescription}}",
+              "stepExpectedResult": "{{node:js-0.output.stepExpectedResult}}"
+            },
+            "limit": 1
+          }
+        },
+        {
+          "id": "js-extract-program",
+          "type": "js",
+          "data": {
+            "input": "{{node:memory-search-1.records}}",
+            "code": "output = (input && input[0] && input[0].program) ? input[0].program : '';"
+          }
+        },
+        {
+          "id": "llm-1",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "role": "assistant",
+            "content": "sleep('1s'); ",
+            "systemPrompt": "You are an expert at writing JS-like code that controls a browser. Given a task and the HTML of the currently open page, you emit a JS program that performs the task. \n You may ONLY use the functions described in this JSON. No other functions, no standard JS library calls: {{node:http-2.output}} \n OPTIONS \n Every function accepts extra string arguments of the form '&lt;optionName&gt;:&lt;optionValue&gt;'. \n Supported: 'timeout:10s' (Go duration format), 'selector:&lt;css selector&gt;'. \n Add a timeout option to every wait function.\n NAVIGATION \n\n- The browser is already open on a page. Do NOT navigate unless the task asks you to.\n- If asked to navigate, only open the URL. Do not log in, do not fill forms.\n- When you need to click on item in main menu, use clickN('nav>a', N) where N starts from 0.\n- When you need to navigate inside the active L10 meeting, use clickN('button.p-2', N) where N starts from 0, for example clickN('button.p-2', 3) to go to Headlines.\n- Always use navigateStatus, never navigate. Assign it to a variable and check it with if. Never use the || operator.\n var status = navigateStatus('[https://example.com](https://example.com)'); if (status != 200) { throw 'got ' + status; }\n- Always sleep after navigating, clicking, or submitting.\n- Never use navigate when you need to click button.  \n WAITING\n- Waiting for a specific text: waitForText or waitForHtml, not waitReady.\n- Only checking whether text exists (no waiting needed): isTextPresent.\n- Reading text: text or llmText. Never read text through selectors.\n- waitReady is for generic page readiness only.\n SELECTORS\n- Prefer HTML/CSS locators. Use llm-based functions only when no locator can be found.\n- Prefer to use `id` locator if the element have it.\n- Never use llmClick or llmClickElement for login buttons.\n- Never invent a selector. If you do not know it, use llmClickElement (not llmClick) with the specific HTML tag.\n- Use attribute selectors only when the attribute is visible in the HTML.\n- NEVER use selectors like `a:contains(<text>)`, `button[<text>]` or `a:has-text(<text>)`. These selectors will never work. \n- When clicking an element identified by its text, infer the likely tag from context: it may be a, div, span, button, etc.\n- When you need to click on IDS name in the list, use clickN(`section>div`, N). First issue in a list will be clickN(`section>div`, 2).\n- When ou need to click the dot next to participant name in the participant list, use clickN('button\\[data-slot=\"dropdown-trigger\"\\]', N). First dot in a list will be clickN('button\\[data-slot=\"dropdown-trigger\"\\]', 2).\n- When you need to click on `Add to IDS` button, use button\\[id=\"&lt;insert actual id here&gt;\"\\].\n INTERACTION\n- Use id locator if element has it, for example: `button[id=\"<uniq number here>\"]`\n- Use clickN(selector, N) when the selector could match several elements. Count elements starting from 0! Check all HTML from the beginning to find correct N. Use click(selector) only when the selector is unique, e.g. an exact href.\n- Prefer clicking a button over submitting a form.\n- Always click an element before sending keys to it.\n- Use sendKeysToElement, never sendKeys.\n WHEN THE ELEMENT IS NOT IN THE HTML\n Do not explain, do not search out loud, do not report that you could not find it. Emit llmClickElement('&lt;visible text&gt;', '&lt;likely tag&gt;'); and continue.\n WHEN NO ACTION IS NEEDED\n If the page is already in the requested state, the whole response is: takeScreenshot('screenshot', 'timeout:10s'); sleep('1s');\n OUTPUT\n- One single line. No line breaks anywhere.\n- No template literals. Escape double quotes with a backslash.\n- Every response starts with takeScreenshot('screenshot', 'timeout:10s'); and ends with sleep('1s');\n\n",
+            "userPrompt": "<task> {{node:js-0.output.stepDescription}}</task>\n <html>: {{node:js-2.output.outHtml}} </html>",
+            "temperature": 0.7,
+            "maxTokens": 10000,
+            "persistedFields": [
+              "userPrompt"
+            ]
+          }
+        },
+        {
+          "id": "js-1",
+          "type": "js",
+          "data": {
+            "input": "{{node:llm-1.response}}",
+            "code": "if (input === null || input === undefined || input === '' || (typeof input === 'string' && /^\\{\\{node:.*\\}\\}$/.test(input))) { output = ''; } else { const escaped = JSON.stringify(input); output = escaped.slice(1, -1); }"
+          }
+        },
+        {
+          "id": "http-3",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/message",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"program\":\"{{node:js-1.output}} {{node:js-extract-program.output}} sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\",\"sessionID\": \"{{node:js-2.output.sessionID}}\", \"stopSession\": false}",
+            "persistedFields": [
+              "body",
+              "sseEvents"
+            ]
+          }
+        },
+        {
+          "id": "js-fix-baas-resp",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-3.response}}",
+            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
+          }
+        },
+        {
+          "id": "llm-2",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "systemPrompt": "You are an experienced QA engineer with deep understanding of EOS (Entrepreneurial Operating System) and L10 meetings.\nYou will be given:\n\n1. A test step description (context for what the tester was trying to do)\n2. The expected result of that test step\n3. A screenshot before the test step execution\n4. A screenshot of the actual result\n\n# Your Task\n\nFrom the `Screenshot before test step` guess the initial test page name for page object pattern, one of following: `Login`, `My EOS`, `Meetings`, `Active Meeting->Segue`, `Active Meeting->Scorecard`, `Active Meeting->Rock review`, `Active Meeting->Headlines`, `Active Meeting->To-Dos`, `Active Meeting->IDS`, `Active Meeting->Conclude`, `Scorecard`, `Rocks`, `To-Dos`, `Issues`, `Headlines`, `Vision / Traction Organizer`, `Accountability Chart`, `Process`, `profile`, `Admin`, `Choose a company`. Compare the screenshots against the expected result, using the test step description as context. Decide whether the test succeeded, failed, or is broken, following the rules below. Then write a comment explaining your decision. \n\n# Domain Rules\n\n- **General principle — judge the end state, not the literal action.** Many test steps describe an action whose purpose is to reach a particular state (e.g., 'resume the meeting,' 'return to meeting', 'open the Issues tab'). If the screenshot shows that the described end state is ALREADY true — regardless of whether you can see the click/transition itself happening — treat the step as successful. The screenshot is evidence of a state, not a video of an action; do not fail a step just because you can't visually confirm a button was clicked, if the resulting state matches what that click was meant to achieve.\n  - Example: if the step says 'resume the meeting' and the meeting is already active (no resume needed), mark it passed.\n  - Example: if the step says 'click `Return to meeting`' and the screenshot shows the user is already inside the active meeting view (timer + Pause button visible), mark it passed — the goal state of 'being back in the meeting' is satisfied.\n  - Example: if the step says 'Enter `15` into the value A' and the final screenshot shows the value of A is 15 — the goal state is satisfied.\n- A meeting is ACTIVE if a timer and a 'Pause' button are visible.\n- A meeting is PAUSED if a 'Resume' button is visible (this is the pause indicator).\n- 'IDS' and 'Issues' refer to the same — treat these names as interchangeable.\n\n# Status Decision Rules (check in this order)\n\n1. **broken** — You cannot understand the test description, OR the screenshot is missing/empty/unreadable.\n2. **test\\_broken** — The test description/expected result is itself flawed or inconsistent (e.g., a required input field is empty when it should have been filled in as a precondition — this is a strong signal for test\\_broken). Or you can't verify the step result cause you are on a wrong page. Or both the before and after screenshots are identical\n3. **success** — The screenshot shows the expected end state was reached, per the 'judge the end state' principle above — even if the literal button-click isn't visible in the screenshot.\n4. **failed** — The page shows an unexpected error message, or the actual end state genuinely does not match the expected result (not just 'the click isn't visible').\n\n# Output Format\n\nReturn exactly one raw JSON object. No arrays, no markdown, no code fences, no triple backticks, no extra text before or after.\n{\"stepDescription\": \"exact `Test step description` from user input\",\n  \"status\": \"success | failed | broken | test\\_broken\",\n  \"comment\": \"Detailed explanation of why you reached this decision, referencing what you saw in the screenshot vs. the expected result.\",\n  \"page\":\"Test page name here\"}",
+            "userPrompt": "Test step description: {{node:js-0.output.stepDescription}}. Test step expected result: {{node:js-0.output.stepExpectedResult}},The Screenshot before test step: {{node:js-2.output.screenshots.screenshot}}  The Screenshot of the result: {{node:js-fix-baas-resp.output.screenshots.screenshot}}",
+            "temperature": 0.7
+          }
+        },
+        {
+          "id": "js-3",
+          "type": "js",
+          "data": {
+            "input": "{{node:llm-2.response}}",
+            "code": "if (typeof input === 'string') { const cleanString = input.replace(/\\n/g, ''); try {  output = JSON.parse(cleanString);} catch (e) {  output = { error: 'Invalid JSON format', details: e.message };  }} else if (input && typeof input === 'object') { output = input; } else { output = { error: 'Unsupported input type', details: typeof input };}"
+          }
+        },
+        {
+          "id": "branch-delete",
+          "type": "branch",
+          "data": {
+            "input": "{{node:js-3.output}}",
+            "branches": [
+              {
+                "name": "success",
+                "condition": "(input.status === \"success\" )",
+                "nodes": [
+                  "memory-store-1",
+                  "output-1"
+                ]
+              },
+              {
+                "name": "failed",
+                "condition": "(input.status === \"test_broken\" || input.status === \"broken\" || input.status === \"failed\")",
+                "nodes": [
+                  "memory-delete-1",
+                  "output-1"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "memory-store-1",
+          "type": "memory-store",
+          "data": {
+            "collection": "test_steps",
+            "data": {
+              "stepDescription": "{{node:js-3.output.stepDescription}}",
+              "stepExpectedResult": "{{node:js-0.output.stepExpectedResult}}",
+              "program": "{{node:js-1.output}}",
+              "page": "{{node:js-3.output.page}}"
+            }
+          }
+        },
+        {
+          "id": "memory-delete-1",
+          "type": "memory-delete",
+          "data": {
+            "some_val": "{{node:branch-delete.activeBranch}}",
+            "collection": "test_steps",
+            "id": "{{node:memory-search-1.records.0.id}}"
+          }
+        },
+        {
+          "id": "output-1",
+          "type": "output",
+          "data": {
+            "Status": "{{node:js-3.output.status}}",
+            "Comment": "{{node:js-3.output.comment}}",
+            "Result_screenshot": "{{node:js-fix-baas-resp.output.screenshots.screenshot}}"
+          }
+        }
+      ],
+      "originalId": "6abfbce36d75534a7ac88237"
+    },
+    {
+      "name": "Test step descriptor v1",
+      "description": "",
+      "nodes": [
+        {
+          "id": "input-1",
+          "type": "input",
+          "data": {
+            "schema": {
+              "sessionID": {
+                "type": "string",
+                "required": true
+              },
+              "testStepDescription": {
+                "type": "string",
+                "required": true
+              },
+              "testStepExpectedResult": {
+                "type": "string",
+                "required": true
+              }
+            }
+          }
+        },
+        {
+          "id": "http-1",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/message",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"program\":\"takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:input-1.sessionID}}\", \"stopSession\": false}",
+            "persistedFields": [
+              "body",
+              "sseEvents"
+            ]
+          }
+        },
+        {
+          "id": "js-2",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-1.response}}",
+            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
+          }
+        },
+        {
+          "id": "llm-0",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Goal\n\nProduce an ordered array of test steps that, executed from the page in the screenshot, verifies the Task. Use the standard procedures (defined below) wherever a part of the work matches one, and write new steps only for parts that no procedure covers.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 0: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 1: Plan the sequence\n\nLook at the screenshot and break the Task into the ordered sequence of user actions needed to reach the state where the bug can be observed, and then to verify it. For example, verifying a bug inside a meeting usually requires starting the meeting first.\n\n- Start from the page shown in the screenshot.\n- Include only actions that are needed to set up and verify the Task. Do not add unrelated steps or cleanup steps unless the Task or Expectations call for them.\n\n## Step 2: Search standard procedures listed below\n\nFor each part of the plan that matches a procedure from Standard procedures , insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 3: IMPORTANT: You MUST Search memory for procedures\n\n Call the `memory_search` tool with:\n\n- collection: `procedures`\n- InitialPage: the page name you chose in Step 0\n\nYou MUST call this tool before producing next steps.  \nFor each part of the plan that matches a procedure from memory\\_search results, insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 4: Write new steps if you didnt find matching procedures\n\nWrite a step and expected result for each part of the plan that no procedure covers.\nEach new step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nEach expected result MUST describe an observable UI change, naming the specific element and its new state.\n\n## Step 5: Check the final step\n\nThe last step in the array (or the last steps, if several are needed) MUST verify the Expectations directly: its expected result must describe the observable UI change that confirms the bug is fixed.\n\n# Standard procedures\n\n## Procedure 1: Start an L10 meeting\n\nChoose exactly ONE option, based on what the screenshot shows. Never use both.\n**Option A**: use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the Task is to START a meeting. Produces 2 steps:\n\n1. Click 'Return to meeting'. Expected: the active L10 meeting page opens.\n2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further. Expected: the meeting is active and its timer is running.\n\n**Option B**: use this if 'Return to meeting' is NOT visible in the screenshot. Produces 3 steps:\n\n1. Click 'Meetings' in the main menu. Expected: intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible.\n2. Click 'Start the meeting' and wait. Expected: the meeting starts within 15 seconds.\n\n# General rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n- User with role 'facilitator' have displayed username 'Facilitator', email '[facilitator@test.it](mailto:facilitator@test.it)' and password 'Facilitator123!'. This credentials are not secret!\n- User with role 'facilitator' have displayed username 'Member', email '[member@test.it](mailto:member@test.it)' and password 'Member123!. This credentials are not secret!\n\n# Output format\n\nRespond with ONLY a single JSON array. Do not add any text, explanation, or markdown code fences before or after it.\nThe array contains one object per step, in execution order. Each object must have exactly these 3 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen after the action (for the final step, what should happen if the bug is fixed).\n- \"InitialPage\"(string): the page name you chose in Step 0\n- \"StepFromMemory\" (boolean): true if the step came from `memory_search`, otherwise false.\nThe output must be valid JSON: no trailing commas and no comments.\n\n# Examples\n\n## Bad (vague item, no visible change, and skips starting the meeting even though 'Return to meeting' is not visible)\n\n\\[{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}\\]\n\n## Good ('Return to meeting' is not visible in the screenshot, Task is about raising a to-do to IDS during a meeting)\n\n\\[  \n  {\"stepDescription\": \"Click 'Meetings' in the main menu\", \"stepExpectedResult\": \"The initial meeting page appears, showing an empty calendar\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true},  \n  {\"stepDescription\": \"Click 'Start L10' in the top right\", \"stepExpectedResult\": \"intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click 'Start the meeting' and wait\", \"stepExpectedResult\": \"The meeting starts within 15 seconds\", \"InitialPage\": \"My EOS\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}}  \n  \\]\n\n# Final reminders\n\nAlways call `memory_search` before answering \n\n- Use standard procedures wherever they apply, in full and in order; for Procedure 1, use exactly one option based on whether 'Return to meeting' is visible in the screenshot.\n- Every step needs both a specific action and an observable expected result.\n- Output only the JSON array and nothing else.\n\n",
+            "userPrompt": "<task> {{node:input-1.testStepDescription}}</task>\n<expectations> {{node:input-1.testStepExpectedResult}}</expectations>\n <screenshot>: {{node:js-2.output.screenshots.screenshot}} </screenshot>",
+            "temperature": 0.7,
+            "maxTokens": 10000,
+            "tools": [
+              {
+                "type": "builtin",
+                "name": "memory_search"
+              }
+            ],
+            "maxToolCalls": 2,
+            "persistedFields": [
+              "userPrompt"
+            ]
+          }
+        },
+        {
+          "id": "js-0",
+          "type": "js",
+          "data": {
+            "input": "{{node:llm-0.response}}",
+            "code": "if (typeof input === 'string') { const cleanString = input.replace(/\\n/g, ''); try {  output = JSON.parse(cleanString);} catch (e) {  output = { error: 'Invalid JSON format', details: e.message };  }} else if (input && typeof input === 'object') { output = input; } else { output = { error: 'Unsupported input type', details: typeof input };}"
+          }
+        },
+        {
+          "id": "orchestrator",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "maxMessages": 20,
+            "maxToolCalls": 20,
+            "maxTokens": 32000,
+            "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step once. If it’s still  'failed' or 'broken' or 'test\\_broken' after the rerun, stop test execution.",
+            "userPrompt": "SessionID: {{node:input-1.sessionID}}, Array of test steps: {{node:js-0.output}}",
+            "tools": [
+              {
+                "type": "agent",
+                "agentId": "6abfbce36d75534a7ac88237",
+                "name": "step_execution_v4",
+                "description": "single test step execution tool",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string",
+                      "description": "SessionIDs, same value for all steps in one test. Requered."
+                    },
+                    "testStepDescription": {
+                      "type": "string",
+                      "description": "Test step action description , plain text"
+                    },
+                    "testStepExpectedResult": {
+                      "type": "string",
+                      "description": "Expexted result of the test step, plain text"
+                    }
+                  },
+                  "required": [
+                    "sessionID",
+                    "testStepDescription",
+                    "testStepExpectedResult"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "js-check-steps",
+          "type": "js",
+          "data": {
+            "input": "{{node:orchestrator.toolCalls}}",
+            "code": "const steps = Array.isArray(input) ? input : (input.Result || input.result || []);const allSuccess = steps.length > 0 && steps.every(s => s.result && s.result.Status === 'success'); if (allSuccess) {  return {    toSave: true,    steps: steps.map(s => ({      testStepDescription: s.input.testStepDescription,      testStepExpectedResult: s.input.testStepExpectedResult    }))  };} else {  return { toSave: false, steps: [] };}"
+          }
+        },
+        {
+          "id": "branch-save",
+          "type": "branch",
+          "data": {
+            "input": {
+              "steps": "{{node:js-check-steps.output}}",
+              "fromMemory": "{{node:js-0.output.0.StepFromMemory}}"
+            },
+            "branches": [
+              {
+                "name": "save",
+                "condition": "(input.steps.toSave === true ) && (input.fromMemory === false)",
+                "nodes": [
+                  "memory-store-1",
+                  "output-1"
+                ]
+              },
+              {
+                "name": "failed",
+                "condition": "(input.steps.toSave === false ) || (input.fromMemory === true)",
+                "nodes": [
+                  "output-1"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "memory-store-1",
+          "type": "memory-store",
+          "data": {
+            "collection": "procedures",
+            "data": {
+              "Name": "{{node:input-1.testStepDescription}}",
+              "InitialPage": "{{node:js-0.output.0.InitialPage}}",
+              "steps": "{{node:js-check-steps.output.steps}}"
+            }
+          }
+        },
+        {
+          "id": "output-1",
+          "type": "output",
+          "data": {
+            "Result": "{{node:orchestrator.toolCalls}}"
+          }
+        }
+      ],
+      "originalId": "6ac4df4fbf1198b608a36011"
+    },
+    {
+      "name": "Jira Bug or Task Runner v11",
+      "description": "",
+      "nodes": [
+        {
+          "id": "input-1",
+          "type": "input",
+          "data": {
+            "schema": {
+              "url": {
+                "type": "string",
+                "required": true,
+                "default": "https://google.com/"
+              },
+              "jiraId": {
+                "type": "string",
+                "required": true
+              },
+              "jiraEmail": {
+                "type": "string",
+                "required": false,
+                "default": "test@user.com"
+              },
+              "jiraHost": {
+                "type": "string",
+                "required": false,
+                "default": "https://something.atlassian.net"
+              }
+            }
+          }
+        },
+        {
+          "id": "http-0",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/start",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"browser\":{\"timeout\": \"20000s\"}, \"hold\": false}"
+          }
+        },
+        {
+          "id": "http-1",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/message",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"program\":\"navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:http-0.response.result.sessionID}}\", \"stopSession\": false}",
+            "persistedFields": [
+              "body",
+              "sseEvents",
+              "responseHeaders"
+            ]
+          }
+        },
+        {
+          "id": "js-fix-id",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-1.response}}",
+            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
+          }
+        },
+        {
+          "id": "http-jira",
+          "type": "http",
+          "data": {
+            "method": "GET",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}",
+            "headers": {
+              "Authorization": "Basic {{secret:Jira_auth}}",
+              "Accept": "application/json"
+            },
+            "persistedFields": [
+              "url",
+              "headers"
+            ]
+          }
+        },
+        {
+          "id": "http-jira-comments",
+          "type": "http",
+          "data": {
+            "method": "GET",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "headers": {
+              "Authorization": "Basic {{secret:Jira_auth}}",
+              "Accept": "application/json"
+            },
+            "persistedFields": [
+              "url",
+              "status"
+            ]
+          }
+        },
+        {
+          "id": "js-extract-desc",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-jira.response}}",
+            "code": "const fields = (input && input.fields) || {}; const summary = fields.summary || ''; const description = fields.description || '(no description provided)'; return { summary, description,}"
+          }
+        },
+        {
+          "id": "js-extract-comment",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-jira-comments.response}}",
+            "code": "const commentsArr = (input.comments && input.comments.comments) || []; const comments = commentsArr.length ? commentsArr.map(function(c){ var body = c.body || ''; return body; }).join('\\n\\n') : '(no comments)'; return { comments }"
+          }
+        },
+        {
+          "id": "llm-generate-steps",
+          "type": "llm",
+          "data": {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "systemPrompt": "You are a senior QA engineer with deep expertise in EOS and Level 10 (L10) meetings.\n\nTASK\nGiven a ticket's summary, description, comments, and a screenshot of the initial page, decide whether the ticket can be tested manually in this application. A ticket may describe either a bug fix or a new feature. If it can be tested, produce a concise, ordered list of manual test steps needed to verify the ticket: for a bug, confirm it is fixed; for a feature, confirm it works as described.\n\nDECISION 1 — Should this ticket be processed?\nBefore writing any steps, decide whether the ticket can be verified through manual UI testing using only the Facilitator or Member account in this application.\nSet \"processTask\" to false if ANY of the following is true:\n\n- Testing requires logging in to or using an external/third-party service (e.g. Google, Microsoft, Slack, email inbox, payment provider).\n- Testing requires an account or role other than Facilitator or Member (e.g. admin, owner, billing, support).\n- The ticket is backend-only, API-only, infrastructure, performance, or otherwise not observable in the UI.\n- Testing requires special hardware, a specific device, a specific browser extension, or a mobile app.\n- The ticket description is too vague or contradictory to derive concrete test steps, even with the comments.\n- Testing requires data, configuration, or environment setup that cannot be created through the UI.\nIf \"processTask\" is false, give a short, specific reason (one sentence) and return an empty \"testCase\" array.\nIf \"processTask\" is true, set \"reason\" to an empty string \"\".\n\nDECISION 2 — Which account should be used?\nChoose exactly ONE account: Facilitator or Member.\n\n- Choose Facilitator if the ticket involves actions only a meeting facilitator can perform (e.g. starting, resuming, or concluding an L10 meeting, managing participants or presence, moving through meeting sections), or if the ticket text explicitly mentions the facilitator role.\n- Choose Member if the ticket text explicitly mentions a regular member/participant, or if there is not enough information to decide.\n\nDECISION 3 — Should logout first?  \nIf you are logged in with wrong user account - the first step of the test should be following.\n\n- stepDescription: \"Log out\"\n- stepExpectedResult: \"SignIn screen available\"\n\nDECISION 4 — Should I login?\n\nIf you are on the SignIn screen or if your previous step was Log Out - the step of the test should be following.\n\n- stepDescription is one of following: \"Log in as Member\" or \"Log in as Facilitator\"\n- stepExpectedResult: \"Login successful\"\n\nDECISION 5 — Is an L10 meeting needed?  \nDecide whether testing the ticket requires an active L10 meeting. If it does, use Procedure 1 to start or return to a meeting. If it does not, do not start a meeting.\n\nGENERAL RULES\n\n- Be as specific as possible: name exact buttons, menu items, icons, and labels to click.\n- Dont make 'Navigate to the L10 meeting' as a separate step. `Start meeting` step is enough.  \n- Each test step must contain exactly ONE user action.\n- The application has a single-level main menu, with tabs within each section.\n- If an action must be repeated N times, write N separate steps. Never use the word \"Repeat\" inside a step.\n- Steps are executed independently — never reference or assume completion of a previous step within a step's text.\n- Use the ticket comments as additional context: they may contain clarifications, reproduction details, root cause notes, acceptance criteria, or confirmation of the fix or implementation that are not present in the original description.\n\nOUTPUT FORMAT — STRICT\nRespond with ONLY a single valid JSON object. No markdown, no code fences, no commentary before or after — your entire response must be parseable as JSON.\nThe object must have exactly these 3 keys, in this exact order:\n\n- \"processTask\": boolean — true if the ticket can be tested manually, false otherwise.\n- \"reason\": string — empty string \"\" when processTask is true; a short, specific explanation when processTask is false.\n- \"testCaseName\": string — name teat cases clear, so it’s easy to navigate.\n- \"testCase\": array — the ordered test steps when processTask is true (the first step must be the login step); an empty array \\[\\[\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]\\]\\] when processTask is false.\n\nEach element of \"testCase\" is an object with exactly these 3 keys, in this exact order:\n\n- \"stepDescription\": string — the action to perform.\n- \"stepExpectedResult\": string — what should happen if the ticket is implemented correctly (the bug is fixed or the feature works as described).\n- \"sessionID\": the id string {{node:js-fix-id.output.sessionID}} — copy it unchanged into every object; never generate, alter, or infer a value for it.\n\nExample output when the ticket is processed:  \n{\"processTask\":true,\"reason\":\"\", \"testCaseName\":\"Meeting start as s member\", \"testCase\":\\[{\"stepDescription\":\"Log in as Member\",\"stepExpectedResult\":\"Login successful\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"},{\"stepDescription\":\"Start L10 meeting\",\"stepExpectedResult\":\"L10 meeting started\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}\\]}\n\nExample output when the ticket is not processed:  \n{\"processTask\":false,\"reason\":\"Need to log in to Google to test it\", \"testCaseName\":\"SignIn with google account\", \"testCase\":\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]}\n\nREMINDER: Output only the JSON object. No text before or after it.",
+            "userPrompt": "Bug Summary: {{node:js-extract-desc.output.summary}}\n\nBug Description:\n{{node:js-extract-desc.output.description}}\n\nBug Comments:\n{{node:js-extract-comment.output}}\n\nFirst page screenshot:\n{{node:js-fix-id.output.screenshots.screenshot}}\n\nGenerate the test steps JSON array now.",
+            "temperature": 0.3,
+            "maxTokens": 32000
+          }
+        },
+        {
+          "id": "js-steps",
+          "type": "js",
+          "data": {
+            "input": "{{node:llm-generate-steps.response}}",
+            "code": "if (input === null || input === undefined || input === '' || (typeof input === 'string' && /^\\{\\{node:.*\\}\\}$/.test(input))) { output = ''; } else {output = input; }"
+          }
+        },
+        {
+          "id": "branch-process",
+          "type": "branch",
+          "data": {
+            "input": "{{node:js-steps.output}}",
+            "branches": [
+              {
+                "name": "continue",
+                "condition": "input.processTask === true",
+                "nodes": [
+                  "orchestrator",
+                  "js-build-comment",
+                  "js-check-success",
+                  "branch-success",
+                  "memory-store-test",
+                  "http-jira-comment",
+                  "http-jira-transitions",
+                  "js-find-transition",
+                  "http-jira-set-done",
+                  "http-last",
+                  "js-prepare-output",
+                  "output-1"
+                ]
+              },
+              {
+                "name": "fail",
+                "condition": "input.processTask === false",
+                "nodes": [
+                  "http-last",
+                  "js-prepare-output",
+                  "output-1"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "orchestrator",
+          "type": "llm",
+          "data": {
+            "some_val": "{{node:branch-process.activeBranch}}",
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "maxMessages": 20,
+            "maxToolCalls": 20,
+            "maxTokens": 32000,
+            "systemPrompt": "You are a test orchestrator. You get an array of test steps, expected results and sessionIDs. Execute each step by calling the Test_step_descriptor tool. Wait for result before proceeding to next step. If the status in the result is 'test_broken', try to rerun the step once. If still 'test_broken' after the rerun, stop test execution. If you get 'failed' status, stop test execution.",
+            "userPrompt": "{{node:llm-generate-steps.response}}",
+            "tools": [
+              {
+                "type": "agent",
+                "agentId": "6ac4df4fbf1198b608a36011",
+                "name": "Test_step_descriptor",
+                "description": "single test step execution tool",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "sessionID": {
+                      "type": "string",
+                      "description": "SessionIDs, same value for all steps in one test. Requered."
+                    },
+                    "testStepDescription": {
+                      "type": "string",
+                      "description": "Test step action description , plain text"
+                    },
+                    "testStepExpectedResult": {
+                      "type": "string",
+                      "description": "Expexted result of the test step, plain text"
+                    }
+                  },
+                  "required": [
+                    "sessionID",
+                    "testStepDescription",
+                    "testStepExpectedResult"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "js-build-comment",
+          "type": "js",
+          "data": {
+            "input": "{{node:orchestrator.response}}",
+            "code": "const text = typeof input === 'string' ? input : JSON.stringify(input, null, 2); const commentBody = JSON.stringify({ body: text }); return { commentBody };"
+          }
+        },
+        {
+          "id": "js-check-success",
+          "type": "js",
+          "data": {
+            "input": "{{node:orchestrator.toolCalls}}",
+            "code": "const calls = Array.isArray(input) ? input : (input && input.toolCalls) || []; const last = calls.length ? calls[calls.length - 1] : null; let status = null; if (last) {   const res = last.result || last.output || {};   const steps = res.Result || res.result || [];   const lastStep = Array.isArray(steps) && steps.length ? steps[steps.length - 1] : null;   status = (lastStep && lastStep.result && lastStep.result.Status) || null; } return { success: status === 'success', status };"
+          }
+        },
+        {
+          "id": "branch-success",
+          "type": "branch",
+          "data": {
+            "input": "{{node:js-check-success.output}}",
+            "branches": [
+              {
+                "name": "pass",
+                "condition": "input.success === true",
+                "nodes": [
+                  "memory-store-test",
+                  "http-jira-comment",
+                  "http-jira-transitions",
+                  "js-find-transition",
+                  "http-jira-set-done",
+                  "http-last",
+                  "js-prepare-output",
+                  "output-1"
+                ]
+              },
+              {
+                "name": "fail",
+                "condition": "input.success === false",
+                "nodes": [
+                  "http-last",
+                  "js-prepare-output",
+                  "output-1"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "js-clean-steps",
+          "type": "js",
+          "data": {
+            "input": "{{node:js-steps.output.testCase}}",
+            "code": "const testCase = Array.isArray(input) ? input : []; const cleanedTestSteps = testCase.map(step => {  const { sessionID, ...rest } = step;  return rest; }); output = { cleanedTestSteps };"
+          }
+        },
+        {
+          "id": "memory-store-test",
+          "type": "memory-store",
+          "data": {
+            "some_val": "{{node:branch-success.activeBranch}}",
+            "collection": "regression_test_cases",
+            "data": {
+              "testCaseName": "{{node:js-steps.output.testCaseName}}",
+              "steps": "{{node:js-clean-steps.output.cleanedTestSteps}}"
+            }
+          }
+        },
+        {
+          "id": "http-jira-comment",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "headers": {
+              "Authorization": "Basic {{secret:Jira_auth}}",
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "X-Gate": "{{node:branch-success.pass}}"
+            },
+            "body": "{{node:js-build-comment.output.commentBody}}",
+            "persistedFields": [
+              "url",
+              "status"
+            ]
+          }
+        },
+        {
+          "id": "http-jira-transitions",
+          "type": "http",
+          "data": {
+            "method": "GET",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "headers": {
+              "Authorization": "Basic {{secret:Jira_auth}}",
+              "Accept": "application/json",
+              "X-Gate": "{{node:branch-success.pass}}"
+            },
+            "persistedFields": [
+              "url",
+              "status"
+            ]
+          }
+        },
+        {
+          "id": "js-find-transition",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-jira-transitions.response}}",
+            "code": "const transitions = (input && input.transitions) || []; const done = transitions.find(t => (t.name || '').toLowerCase() === 'done' || (t.to && t.to.name && t.to.name.toLowerCase() === 'done')); return { transitionId: done ? done.id : null };"
+          }
+        },
+        {
+          "id": "http-jira-set-done",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "headers": {
+              "Authorization": "Basic {{secret:Jira_auth}}",
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            },
+            "body": "{\"transition\": {\"id\": \"{{node:js-find-transition.output.transitionId}}\"}}",
+            "persistedFields": [
+              "url",
+              "status",
+              "body"
+            ]
+          }
+        },
+        {
+          "id": "http-last",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/stop",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
+              "X-Gate": "{{node:branch-success.activeBranch}}"
+            },
+            "body": "{\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}"
+          }
+        },
+        {
+          "id": "js-prepare-output",
+          "type": "js",
+          "data": {
+            "input": "[{{node:orchestrator.toolCalls}}, {{node:branch-process.fail.reason}}]",
+            "code": "output = { debug: input, a: input[0], b: input[1] }"
+          }
+        },
+        {
+          "id": "output-1",
+          "type": "output",
+          "data": {
+            "fail_reason": "{{node:branch-process.fail.reason}}",
+            "result": "{{node:orchestrator.toolCalls}}"
+          }
+        }
+      ],
+      "originalId": "6ac4df8fbf1198b608a36017"
+    }
+  ],
+  "collections": [
+    {
+      "name": "regression_test_cases",
+      "schema": {
+        "description": null,
+        "fields": [
+          {
+            "name": "status",
+            "type": "string",
+            "required": false,
+            "index": false,
+            "description": ""
+          },
+          {
+            "name": "testCaseName",
+            "type": "string",
+            "required": true,
+            "index": true,
+            "description": ""
+          },
+          {
+            "name": "steps",
+            "type": "array",
+            "required": true,
+            "index": false,
+            "description": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "procedures",
+      "schema": {
+        "description": null,
+        "fields": [
+          {
+            "name": "Name",
+            "type": "string",
+            "required": true,
+            "index": false,
+            "description": ""
+          },
+          {
+            "name": "steps",
+            "type": "string",
+            "required": true,
+            "index": false,
+            "description": ""
+          },
+          {
+            "name": "InitialPage",
+            "type": "string",
+            "required": true,
+            "index": true,
+            "description": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "test_steps",
+      "schema": {
+        "description": null,
+        "fields": [
+          {
+            "name": "stepDescription",
+            "type": "string",
+            "required": true,
+            "index": true,
+            "description": ""
+          },
+          {
+            "name": "stepExpectedResult",
+            "type": "string",
+            "required": true,
+            "index": true,
+            "description": ""
+          },
+          {
+            "name": "program",
+            "type": "string",
+            "required": true,
+            "index": false,
+            "description": ""
+          },
+          {
+            "name": "page",
+            "type": "string",
+            "required": true,
+            "index": true,
+            "description": ""
+          }
+        ]
+      }
+    }
+  ],
+  "secrets": [
+    {
+      "name": "Jira_auth"
+    },
+    {
+      "name": "BAAS_API_KEY"
+    }
+  ],
+  "providers": [
+    "openai"
+  ]
+}
