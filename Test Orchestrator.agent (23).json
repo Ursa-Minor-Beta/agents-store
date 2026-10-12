@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-10-12T11:50:07.271Z",
+  "exportedAt": "2026-10-12T13:50:36.516Z",
   "workspace": {
-    "name": "QA",
+    "name": "QA (1)",
     "description": "Workspace for testing and QA agents"
   },
   "agent": {
@@ -410,52 +410,6 @@
           }
         },
         {
-          "id": "branch-deside",
-          "type": "branch",
-          "data": {
-            "input": "{{node:js-0.output}}",
-            "branches": [
-              {
-                "name": "found",
-                "condition": "input.from_memory === true",
-                "nodes": [
-                  "memory-search-1",
-                  "memory-delete-1"
-                ]
-              },
-              {
-                "name": "create",
-                "condition": "input.from_memory === false",
-                "nodes": [
-                  "llm-1",
-                  "memory-store-1"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "memory-search-1",
-          "type": "memory-search",
-          "data": {
-            "collection": "test_steps",
-            "filters": {
-              "page": "{{node:js-0.output.page}}",
-              "stepDescription": "{{node:js-0.output.stepDescription}}",
-              "stepExpectedResult": "{{node:js-0.output.stepExpectedResult}}"
-            },
-            "limit": 1
-          }
-        },
-        {
-          "id": "js-extract-program",
-          "type": "js",
-          "data": {
-            "input": "{{node:memory-search-1.records}}",
-            "code": "output = (input && input[0] && input[0].program) ? input[0].program : '';"
-          }
-        },
-        {
           "id": "llm-1",
           "type": "llm",
           "data": {
@@ -481,97 +435,12 @@
           }
         },
         {
-          "id": "http-3",
-          "type": "http",
-          "data": {
-            "method": "POST",
-            "url": "{{node:input.baasHost}}/api/async/message",
-            "timeout": 95000,
-            "headers": {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
-            },
-            "body": "{\"timeout\":\"90s\",\"program\":\"{{node:js-1.output}} {{node:js-extract-program.output}} sleep('5s'); takeScreenshot('screenshot', 'timeout:10s');\",\"sessionID\": \"{{node:js-2.output.sessionID}}\", \"stopSession\": false}",
-            "persistedFields": [
-              "body",
-              "sseEvents"
-            ]
-          }
-        },
-        {
-          "id": "llm-2",
-          "type": "llm",
-          "data": {
-            "provider": "openai",
-            "model": "gpt-4.1",
-            "systemPrompt": "You are an experienced QA engineer with deep understanding of EOS (Entrepreneurial Operating System) and L10 meetings.\nYou will be given:\n1. A test step description (context for what the tester was trying to do)\n2. The expected result of that test step\n3. A screenshot before the test step execution\n4. A screenshot of the actual result\n# Your Task\nFrom the `Screenshot before test step` guess the initial test page name for page object pattern, one of following: `My EOS`, `Meetings`, `Active Meeting`, `Scorecard`, `Rocks`, `To-Dos`, `Issues`, `Headlines`, `Vision / Traction Organizer`, `Accountability Chart`, `Process`, `profile`, `Admin`, `Choose a company`. Compare the screenshots against the expected result, using the test step description as context. Decide whether the test succeeded, failed, or is broken, following the rules below. Then write a comment explaining your decision.\n# Domain Rules\n- **General principle — judge the end state, not the literal action.** Many test steps describe an action whose purpose is to reach a particular state (e.g., 'resume the meeting,' 'return to meeting', 'open the Issues tab'). If the screenshot shows that the described end state is ALREADY true — regardless of whether you can see the click/transition itself happening — treat the step as successful. The screenshot is evidence of a state, not a video of an action; do not fail a step just because you can't visually confirm a button was clicked, if the resulting state matches what that click was meant to achieve.\n  - Example: if the step says 'resume the meeting' and the meeting is already active (no resume needed), mark it passed.\n  - Example: if the step says 'click `Return to meeting`' and the screenshot shows the user is already inside the active meeting view (timer + Pause button visible), mark it passed — the goal state of 'being back in the meeting' is satisfied.\n  - A meeting is ACTIVE if a timer and a 'Pause' button are visible.\n  - A meeting is PAUSED if a 'Resume' button is visible (this is the pause indicator).\n  - 'IDS' and 'Issues' refer to the same — treat these names as interchangeable.\n# Status Decision Rules (check in this order)\n1. **broken** — You cannot understand the test description, OR the screenshot is missing/empty/unreadable.\n2. **test_broken** — The test description/expected result is itself flawed or inconsistent (e.g., a required input field is empty when it should have been filled in as a precondition — this is a strong signal for test_broken).\n3. **success** — The screenshot shows the expected end state was reached, per the 'judge the end state' principle above — even if the literal button-click isn't visible in the screenshot.\n4. **failed** — The page shows an unexpected error message, or the actual end state genuinely does not match the expected result (not just 'the click isn't visible').\n# Output Format\nReturn exactly one raw JSON object. No arrays, no markdown, no code fences, no triple backticks, no extra text before or after.\n{\"stepDescription\": \"exact `Test step description` from user input\",\n  \"status\": \"success | failed | broken | test_broken\",\n  \"comment\": \"Detailed explanation of why you reached this decision, referencing what you saw in the screenshot vs. the expected result.\",\n  \"page\":\"Test page name here\"}",
-            "userPrompt": "Test step description: {{node:js-0.output.stepDescription}}. Test step expected result: {{node:js-0.output.stepExpectedResult}},The Screenshot before test step: {{node:js-2.output.screenshots.screenshot}}  The Screenshot of the result: {{node:http-3.response.screenshots.screenshot}}",
-            "temperature": 0.7
-          }
-        },
-        {
-          "id": "js-3",
-          "type": "js",
-          "data": {
-            "input": "{{node:llm-2.response}}",
-            "code": "if (typeof input === 'string') { const cleanString = input.replace(/\\n/g, ''); try {  output = JSON.parse(cleanString);} catch (e) {  output = { error: 'Invalid JSON format', details: e.message };  }} else if (input && typeof input === 'object') { output = input; } else { output = { error: 'Unsupported input type', details: typeof input };}"
-          }
-        },
-        {
-          "id": "branch-delete",
-          "type": "branch",
-          "data": {
-            "input": "{{node:js-3.output}}",
-            "branches": [
-              {
-                "name": "success",
-                "condition": "(input.status === 'success' || input.status === 'broken' )",
-                "nodes": [
-                  "memory-store-1",
-                  "output-1"
-                ]
-              },
-              {
-                "name": "failed",
-                "condition": "(input.status === 'test_broken' || input.status === 'broken' || input.status === 'failed')",
-                "nodes": [
-                  "memory-delete-1",
-                  "output-1"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "memory-store-1",
-          "type": "memory-store",
-          "data": {
-            "collection": "test_steps",
-            "data": {
-              "stepDescription": "{{node:js-3.output.stepDescription}}",
-              "stepExpectedResult": "{{node:js-0.output.stepExpectedResult}}",
-              "program": "{{node:js-1.output}}",
-              "page": "{{node:js-3.output.page}}"
-            }
-          }
-        },
-        {
           "id": "memory-delete-1",
           "type": "memory-delete",
           "data": {
             "some_val": "{{node:branch-delete.activeBranch}}",
             "collection": "test_steps",
             "id": "{{node:memory-search-1.records.0.id}}"
-          }
-        },
-        {
-          "id": "output-1",
-          "type": "output",
-          "data": {
-            "stepDescription": "{{node:js-0.output.stepDescription}}",
-            "Result": "{{node:llm-2.response}}",
-            "Browser_program": "{{node:js-1.output}}",
-            "Result_screenshot": "{{node:http-3.response.screenshots.screenshot}}"
           }
         }
       ]
