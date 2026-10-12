@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-10-12T13:50:36.516Z",
+  "exportedAt": "2026-10-12T14:13:07.216Z",
   "workspace": {
     "name": "QA (1)",
     "description": "Workspace for testing and QA agents"
@@ -127,69 +127,6 @@
         }
       },
       {
-        "id": "llm-generate-steps",
-        "type": "llm",
-        "data": {
-          "provider": "openai",
-          "model": "gpt-4.1",
-          "systemPrompt": "You are a senior QA engineer with deep expertise in EOS and Level 10 (L10) meetings.\nTASK\nGiven a bug's summary, description, comments, and a screenshot of the initial page, produce a concise, ordered list of manual test steps needed to verify the bug and confirm its fix.\nGENERAL RULES\n- Be as specific as possible: name exact buttons, menu items, icons, and labels to click.\n- Each test step must contain exactly ONE user action.\n- The application has a single-level main menu, with tabs within each section.\n- If an action must be repeated N times, write N separate steps. Never use the word 'Repeat' inside a step.\n- Steps are executed independently — never reference or assume completion of a previous step within a step's text.\n- Use the bug comments as additional context: they may contain clarifications, reproduction details, root cause notes, or confirmation of the fix that are not present in the original description.\nREUSABLE PROCEDURES\nUse these exact sequences whenever the scenario calls for them.\nProcedure 1 — Start an L10 meeting\nChoose exactly ONE option below, based on what the screenshot shows. Never use both.\n  Option A — Use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the task is to START a meeting. This produces 2 steps:\n    1. Click 'Return to meeting'.\n    2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further.\n  Option B — Use this if 'Return to meeting' is NOT visible in the screenshot. This produces 3 steps:\n    1. Click 'Meetings' on the main menu. The initial meeting page appears, showing an empty calendar.\n    2. Click 'Start L10' in the top right. Participants list appear and `Start` meeting button is visible.\n    3. Click 'Start' and wait. The meeting should start within 15 seconds.\n  Procedure 2 — Archive a board\n    1. Click the board name to open its cards.\n    2. Click the settings (gear) icon.\n    3. Click 'Archive' in the dropdown.\n    4. Click 'OK' in the confirmation alert.\n  Procedure 3 — Conclude an active meeting\n    1. Navigate to 'Conclude' in the L10 meeting menu.\n    2. Click 'Conclude Level 10'.\n    3. Wait for the 'Conclude this Level 10?' dialog, then click 'Conclude Level 10' to confirm.\n    4. The meeting is concluded once the 'Past L10 meetings' tab appears.\n  Procedure 4 — Add Issue\n    1. Type issue name in the input field.\n    2. Click button to add issue.\n  Procedure 5 — Solve Issue\n    1. Klick on line with IDS name in the IDS list. The issue details should be visible.\n    2. Click Solve button.\n    Procedure 6 — Kill Issue\n    1. Klick on line with IDS name in the IDS list. The issue details should be visible.\n    2. Click Kill button. The issue should NOT be wisible after killing.\n    Procedure 6 — Add ToDo during the meeting\n    1. Click 'New To-Do button.\n    2. Fill nn Title field.\n    3. Fill in Description field.\n    4. Click 'Create To-Do' button and wait for 15 seconds. You should see your ToDo in `New commitments` section.\n    Procedure 7 — Mark person 'Absent' in the participants list.\n    1. Click the dot next to participant name. Dropdown with presence should be opened.\n    2. Click on 'Absent' in the dropdown list.\n    Procedure 8 — Open user profile\n    1. Click on the user name at bottom left corner.\n    2. Click on 'My profile' button in the dropdown menu.\n    OUTPUT FORMAT — STRICT\n    Respond with ONLY a valid JSON array. No markdown, no code fences, no commentary before or after — your entire response must be parseable as JSON.\n    Each array element is an object with exactly these 3 keys, in this exact order:\n    - \"stepDescription\": string — the action to perform.\n- \"stepExpectedResult\": string — what should happen if the bug is fixed.\n- \"sessionID\": the id string {{node:js-fix-id.output.sessionID}} — copy it unchanged into every object; never generate, alter, or infer a value for it.\nExample output:\n[{\"stepDescription\":\"Open the login page\",\"stepExpectedResult\":\"Login page loads without errors\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}]\nREMINDER: Output only the JSON array. No text before or after it.",
-          "userPrompt": "Bug Summary: {{node:js-extract-desc.output.summary}}\n\nBug Description:\n{{node:js-extract-desc.output.description}}\n\nBug Comments:\n{{node:js-extract-comment.output}}\n\nFirst page screenshot:\n{{node:js-fix-id.output.screenshots.screenshot}}\n\nGenerate the test steps JSON array now.",
-          "temperature": 0.3,
-          "maxTokens": 32000
-        }
-      },
-      {
-        "id": "orchestrator",
-        "type": "llm",
-        "data": {
-          "provider": "openai",
-          "model": "gpt-4.1",
-          "maxMessages": 20,
-          "maxToolCalls": 20,
-          "maxTokens": 32000,
-          "systemPrompt": "You are a test orchestrator. You get an array of test steps, expected results and sessionIDs. Execute each step by calling the step_execution tool. Wait for result before proceeding to next step. If the status in the result is 'test_broken', try to rerun the step once. If still 'test_broken' after the rerun, stop test execution. If you get 'failed' status, stop test execution. Return the array with the results of executed steps you get from tool.",
-          "userPrompt": "{{node:llm-generate-steps.response}}",
-          "tools": [
-            {
-              "type": "agent",
-              "agentId": "test-step-executor",
-              "name": "step_execution_v2",
-              "description": "single test step execution tool",
-              "parameters": {
-                "type": "object",
-                "properties": {
-                  "sessionID": {
-                    "type": "string",
-                    "description": "SessionIDs, same value for all steps in one test. Requered."
-                  },
-                  "testStepDescription": {
-                    "type": "string",
-                    "description": "Test step action description , plain text"
-                  },
-                  "testStepExpectedResult": {
-                    "type": "string",
-                    "description": "Expexted result of the test step, plain text"
-                  }
-                },
-                "required": [
-                  "sessionID",
-                  "testStepDescription",
-                  "testStepExpectedResult"
-                ]
-              }
-            }
-          ]
-        }
-      },
-      {
-        "id": "js-build-comment",
-        "type": "js",
-        "data": {
-          "input": "{{node:orchestrator.response}}",
-          "code": "const text = typeof input === 'string' ? input : JSON.stringify(input, null, 2); const commentBody = JSON.stringify({ body: text }); return { commentBody };"
-        }
-      },
-      {
         "id": "http-jira-comment",
         "type": "http",
         "data": {
@@ -205,14 +142,6 @@
             "url",
             "status"
           ]
-        }
-      },
-      {
-        "id": "js-check-success",
-        "type": "js",
-        "data": {
-          "input": "{{node:orchestrator.toolCalls}}",
-          "code": "const calls = Array.isArray(input) ? input : (input && input.toolCalls) || []; const last = calls.length ? calls[calls.length - 1] : null; let status = null; if (last) { const res = last.result || last.output || {}; status = (res.Result && res.Result.status) || res.status || null; } return { success: status === 'success', status };"
         }
       },
       {
@@ -309,149 +238,8 @@
       }
     ]
   },
-  "dependencies": [
-    {
-      "refId": "test-step-executor",
-      "name": "Test Step Executor",
-      "description": "Executes a single test step using BaaS, generates browser code, and evaluates the result",
-      "nodes": [
-        {
-          "id": "input",
-          "type": "input",
-          "data": {
-            "schema": {
-              "sessionID": {
-                "type": "string",
-                "required": true
-              },
-              "testStepDescription": {
-                "type": "string",
-                "required": true
-              },
-              "testStepExpectedResult": {
-                "type": "string",
-                "required": true
-              },
-              "baasHost": {
-                "type": "string",
-                "required": true,
-                "default": "http://host.docker.internal:8090"
-              }
-            }
-          }
-        },
-        {
-          "id": "http-1",
-          "type": "http",
-          "data": {
-            "method": "POST",
-            "url": "{{node:input.baasHost}}/api/async/message",
-            "timeout": 95000,
-            "headers": {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
-            },
-            "body": "{\"timeout\":\"90s\",\"program\":\"takeScreenshot('screenshot', 'timeout:10s'); innerHtml('body', 'timeout:10s')\",\"sessionID\": \"{{node:input.sessionID}}\", \"stopSession\": false}",
-            "persistedFields": [
-              "body",
-              "sseEvents"
-            ]
-          }
-        },
-        {
-          "id": "js-2",
-          "type": "js",
-          "data": {
-            "input": "{{node:http-1.response}}",
-            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
-          }
-        },
-        {
-          "id": "http-2",
-          "type": "http",
-          "data": {
-            "method": "GET",
-            "url": "{{node:input.baasHost}}/api/async/actions",
-            "timeout": 95000,
-            "headers": {
-              "Content-Type": "application/json",
-              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
-            }
-          }
-        },
-        {
-          "id": "llm-0",
-          "type": "llm",
-          "data": {
-            "provider": "openai",
-            "model": "gpt-4.1",
-            "systemPrompt": "# Role\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n# Inputs\nYou will receive:\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n# Workflow\nFollow these steps in order. Do not skip any step.\n## Step 1: Identify the starting page\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n- My EOS\n- Meetings\n- Active Meeting\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n## Step 2: Search memory for existing test steps\nCall the `memory_search` tool with:\n- collection: `test_steps`\n- field: `page`\n- query: the page name you chose in Step 1\nYou MUST call this tool before producing any output.\n## Step 3: Check for a matching step\nCompare each result's `stepDescription` and `stepExpectedResult` with the Task and Expectations.\nA result counts as a match only if BOTH of these are true:\n- It performs the same user action on the same type of element (e.g., clicking \"Raise Issue\" on a to-do).\n- It verifies the same outcome described in the Expectations.\nDifferences in wording, or in the specific item name, do not prevent a match. A different action or a different expected outcome does.\n- If a match exists: use that result's `stepDescription`, `stepExpectedResult`, and `page` exactly as stored, and set `from_memory` to `true`. If several match, use the closest one.\n- If there is no match, or the search returns no results or an error: go to Step 4.\n## Step 4: Write a new test step (only if there is no match)\nWrite one test step and one expected result that verify the Task. Set `from_memory` to `false` and `page` to the value from Step 1.\nThe step MUST be specific and executable. It should:\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nThe expected result MUST describe an observable UI change that confirms the fix, naming the specific element and its new state.\n# EOS platform behavior rules\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n# Output format\nRespond with ONLY a single JSON object. Do not add any text, explanation, or markdown code fences before or after it.\nThe object must have exactly these 4 keys:\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen if the bug is fixed.\n- \"page\" (string): the starting page, one value from the list in Step 1.\n- \"from_memory\" (boolean): true if the step came from `memory_search`, otherwise false.\n# Examples\n## Bad (too vague: says \"one of the to-dos\" and does not describe a visible change)\n{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"page\": \"Active Meeting\", \"from_memory\": false}\n## Good (names the exact item and the exact visible change)\n{\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"page\": \"Active Meeting\", \"from_memory\": false}\n# Final reminders\n- Always call `memory_search` before answering.\n- \"page\" must be exactly one value from the list in Step 1.\n- \"from_memory\" must be a JSON boolean (true or false), not a string.\n- Output only the JSON object and nothing else.",
-            "userPrompt": "<task> {{node:input.testStepDescription}}</task>\n<expectations> {{node:input.testStepExpectedResult}}</expectations>\n <screenshot>: {{node:js-2.output.screenshots.screenshot}} </screenshot>",
-            "temperature": 0.7,
-            "maxTokens": 10000,
-            "tools": [
-              {
-                "type": "builtin",
-                "name": "memory_search"
-              }
-            ],
-            "maxToolCalls": 2,
-            "persistedFields": [
-              "userPrompt"
-            ]
-          }
-        },
-        {
-          "id": "js-0",
-          "type": "js",
-          "data": {
-            "input": "{{node:llm-0.response}}",
-            "code": "if (typeof input === 'string') { const cleanString = input.replace(/\\n/g, ''); try {  output = JSON.parse(cleanString);} catch (e) {  output = { error: 'Invalid JSON format', details: e.message };  }} else if (input && typeof input === 'object') { output = input; } else { output = { error: 'Unsupported input type', details: typeof input };}"
-          }
-        },
-        {
-          "id": "llm-1",
-          "type": "llm",
-          "data": {
-            "provider": "openai",
-            "model": "gpt-4.1",
-            "role": "assistant",
-            "content": "sleep('1s'); ",
-            "systemPrompt": "You are an expert at writing JS-like code that controls a browser. Given a task and the HTML of the currently open page, you emit a JS program that performs the task.\n You may ONLY use the functions described in this JSON. No other functions, no standard JS library calls: {{node:http-2.output}}\n OPTIONS\n Every function accepts extra string arguments of the form '<optionName>:<optionValue>'.\n Supported: 'timeout:10s' (Go duration format), 'selector:<css selector>'.\n Add a timeout option to every wait function.\n NAVIGATION\n - The browser is already open on a page. Do NOT navigate unless the task asks you to.\n - If asked to navigate, only open the URL. Do not log in, do not fill forms.\n - When you need to navidate inside main menu, use clickN(`nav>a`, N) where N starts from 0.\n - When you need to navigate inside the active L10 meeting, use clickN(`button[data-slot=\"tooltip-trigger\"]`, N) where N starts from 0, for example clickN(`button[data-slot=\"tooltip-trigger\"]`, 3) to go to Headlines.\n - Always use navigateStatus, never navigate. Assign it to a variable and check it with if. Never use the || operator.\n var status = navigateStatus('https://example.com'); if (status != 200) { throw 'got ' + status; }\n - Always sleep after navigating, clicking, or submitting.\n - Never use nevidate when you need to click button.\n WAITING\n - Waiting for a specific text: waitForText or waitForHtml, not waitReady.\n - Only checking whether text exists (no waiting needed): isTextPresent.\n - Reading text: text or llmText. Never read text through selectors.\n - waitReady is for generic page readiness only.\n SELECTORS\n - Prefer HTML/CSS locators. Use llm-based functions only when no locator can be found.\n - Prefer to use `id` locator if the element have it.\n - Never use llmClick or llmClickElement for login buttons.\n - Never invent a selector. If you do not know it, use llmClickElement (not llmClick) with the specific HTML tag.\n - Use attribute selectors only when the attribute is visible in the HTML.\n - NEVER use selectors like `a:contains(<text>)`, `button[<text>]` or `a:has-text(<text>)`. These selectors will never work.\n - When clicking an element identified by its text, infer the likely tag from context: it may be a, div, span, button, etc.\n - When you need to click on IDS name in the list, use clickN(`section>div`, N). First issue in a list will be clickN(`section>div`, 2).\n - When ou need to click the dot next to participant name in the participant list, use clickN('button[data-slot=\"dropdown-trigger\"]', N). First dot in a list will be clickN('button[data-slot=\"dropdown-trigger\"]', 2).\n - When you need to click on `Add to IDS` button, use button[id=\"<insert actual id here>\"].\n INTERACTION\n - Use id locator if element has it, for example: `button[id=\"<uniq number here>\"]`\n - Use clickN(selector, N) when the selector could match several elements. Count elements starting from 0! Check all HTML from the beginning to find correct N. Use click(selector) only when the selector is unique, e.g. an exact href.\n - Prefer clicking a button over submitting a form.\n - Always click an element before sending keys to it.\n - Use sendKeysToElement, never sendKeys.\n WHEN THE ELEMENT IS NOT IN THE HTML\n Do not explain, do not search out loud, do not report that you could not find it. Emit llmClickElement('<visible text>', '<likely tag>'); and continue.\n WHEN NO ACTION IS NEEDED\n If the page is already in the requested state, the whole response is: takeScreenshot('screenshot', 'timeout:10s'); sleep('3s');\n OUTPUT\n - One single line. No line breaks anywhere.\n - No template literals. Escape double quotes with a backslash.\n - Every response starts with takeScreenshot('screenshot', 'timeout:10s'); and ends with sleep('3s');",
-            "userPrompt": "<task> {{node:js-0.output.stepDescription}}</task>\n <html>: {{node:js-2.output.outHtml}} </html>",
-            "temperature": 0.7,
-            "maxTokens": 10000,
-            "persistedFields": [
-              "userPrompt"
-            ]
-          }
-        },
-        {
-          "id": "js-1",
-          "type": "js",
-          "data": {
-            "input": "{{node:llm-1.response}}",
-            "code": "if (input === null || input === undefined || input === '' || (typeof input === 'string' && /^\\{\\{node:.*\\}\\}$/.test(input))) { output = ''; } else { const escaped = JSON.stringify(input); output = escaped.slice(1, -1); }"
-          }
-        },
-        {
-          "id": "memory-delete-1",
-          "type": "memory-delete",
-          "data": {
-            "some_val": "{{node:branch-delete.activeBranch}}",
-            "collection": "test_steps",
-            "id": "{{node:memory-search-1.records.0.id}}"
-          }
-        }
-      ]
-    }
-  ],
-  "collections": [
-    {
-      "name": "test_steps",
-      "schema": null
-    }
-  ],
+  "dependencies": [],
+  "collections": [],
   "secrets": [
     {
       "name": "BAAS_API_KEY"
@@ -460,7 +248,5 @@
       "name": "Jira_auth"
     }
   ],
-  "providers": [
-    "openai"
-  ]
+  "providers": []
 }
