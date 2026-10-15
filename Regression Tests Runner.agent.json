@@ -1,11 +1,12 @@
 {
   "version": "1.0",
-  "exportedAt": "2026-10-09T08:19:58.589Z",
+  "exportedAt": "2026-10-15T14:42:56.721Z",
   "workspace": {
-    "name": "Regression_new",
+    "name": "Regression",
     "description": ""
   },
   "agent": {
+    "refId": "regression-tests-runner",
     "name": "Regression Tests Runner",
     "description": "Reads all records from the regression_test_cases memory collection and outputs an array of their record IDs.",
     "nodes": [
@@ -26,7 +27,7 @@
         "id": "memory-search-1",
         "type": "memory-search",
         "data": {
-          "collection": "regression_test_cases",
+          "collection": "regression_test_cases_parallel",
           "limit": 1000
         }
       },
@@ -47,12 +48,12 @@
           "temperature": 0.2,
           "maxTokens": 32000,
           "maxToolCalls": 1000,
-          "systemPrompt": "You are a regression test orchestrator and analyst. You will receive a list of TestCaseNames. For EACH test case name the list, call the 'run_regression_test' tool ONE AT A TIME (sequentially - wait for each result before starting the next). Do not call it in parallel and do not skip any test case.\n\nAfter all test cases have been executed, analyze all the results together and respond with following:\n1. Summarise the regression test run for CTO, without direct mention of CTO. Add numbers of Failed/Broken/Success tests 2. List the failed tests with last steps and reasons. 3. List the broken tests with last steps and reasons. 4. List the successed tests, just names  \n\nRules:\n- Status of the test is the status of its last step. Ignore statuses of all previous steps, only last one is important!).\n- Base failure details on the actual data returned by the tool calls (error messages, failed steps, statuses).\n- Each test have only one status: success/failed/broken. Never put one test in different lists.",
-          "userPrompt": "Here is the list of regression test cases names to execute (testCaseName):\n{{node:js-1.output}}\n\nExecute each one using the run_regression_test tool, one at a time, then return the final JSON summary as instructed.",
+          "systemPrompt": "You are a regression test orchestrator and analyst. You will receive a list of TestCaseNames. For EACH test case name in the list, call the 'run_regression_test' tool ONE AT A TIME (sequentially - wait for each result before starting the next). Do not call it in parallel and do not skip any test case.\n\nRules:\n- Status of a test is the status of its LAST step only. Ignore statuses of all previous steps, only the last one matters.\n- Each test has exactly one status: success, failed, or broken. Never put the same test in more than one category.\n- Base failure/broken details on the actual data returned by the tool calls (error messages, failed steps, statuses).\n\nAfter all test cases have been executed, respond with ONLY a single valid JSON object (no markdown, no code fences, no extra commentary) with this exact shape:\n{\n  \"summary\": \"A concise narrative summary of the regression run suitable for a leadership audience, including overall health and notable risks. Do not mention job titles.\",\n  \"counts\": { \"success\": <number>, \"failed\": <number>, \"broken\": <number> },\n  \"tests\": [\n    { \"name\": \"<test case name>\", \"status\": \"success|failed|broken\", \"lastStep\": \"<description of the last executed step>\", \"reason\": \"<reason/error if failed or broken, otherwise 'N/A'>\" }\n  ]\n}\n\nInclude EVERY test case in the 'tests' array, including successful ones (reason can be 'N/A' for successes).",
+          "userPrompt": "Here is the list of regression test cases names to execute (testCaseName):\n{{node:js-1.output}}\n\nExecute each one using the run_regression_test tool, one at a time, then return the final JSON object as instructed.",
           "tools": [
             {
               "type": "agent",
-              "agentId": "6ac54434d737deb76568ff8c",
+              "agentId": "single-regression-test-runner",
               "name": "run_regression_test",
               "description": "Runs a single regression test case by id against the staging environment and returns the step-by-step execution result.",
               "parameters": {
@@ -64,7 +65,7 @@
                   }
                 },
                 "required": [
-                  "id"
+                  "testCaseName"
                 ]
               }
             }
@@ -76,22 +77,67 @@
         "type": "js",
         "data": {
           "input": "{{node:analyzer.response}}",
-          "code": "let parsed; try { const text = typeof input === 'string' ? input : JSON.stringify(input); const match = text.match(/\\{[\\s\\S]*\\}/); parsed = JSON.parse(match ? match[0] : text); } catch (e) { parsed = { regressionStatus: 'UNKNOWN', summary: 'Failed to parse analyzer output: ' + e.message, successChecks: [], failedChecks: [], raw: input }; } output = parsed;"
+          "code": "let parsed; try { const text = typeof input === 'string' ? input : JSON.stringify(input); const match = text.match(/\\{[\\s\\S]*\\}/); parsed = JSON.parse(match ? match[0] : text); } catch (e) { parsed = { summary: 'Failed to parse analyzer output: ' + e.message, counts: { success: 0, failed: 0, broken: 0 }, tests: [], raw: input }; } output = parsed;"
+        }
+      },
+      {
+        "id": "js-build-html",
+        "type": "js",
+        "data": {
+          "input": "{{node:js-parse-report.output}}",
+          "code": "const data = input || {};\nconst counts = data.counts || {};\nconst summary = data.summary || '';\nconst tests = Array.isArray(data.tests) ? data.tests : [];\n\nfunction norm(s) { return String(s || 'unknown').toLowerCase(); }\nfunction esc(s) {\n  return String(s == null ? '' : s)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\n}\n\nconst successCount = counts.success != null ? counts.success : tests.filter(t => norm(t.status) === 'success').length;\nconst failedCount = counts.failed != null ? counts.failed : tests.filter(t => norm(t.status) === 'failed').length;\nconst brokenCount = counts.broken != null ? counts.broken : tests.filter(t => norm(t.status) === 'broken').length;\n\nfunction renderTest(t) {\n  const st = norm(t.status);\n  const name = t.name || t.testCaseName || 'Unnamed test';\n  return '<div class=\"test-item\" data-status=\"' + st + '\">' +\n    '<div class=\"test-header\"><span class=\"badge badge-' + st + '\">' + esc(t.status) + '</span>' +\n    '<span class=\"test-name\">' + esc(name) + '</span></div>' +\n    '<div class=\"test-body\"><p><strong>Last step:</strong> ' + esc(t.lastStep || t.last_step || 'N/A') + '</p>' +\n    '<p><strong>Reason:</strong> ' + esc(t.reason || t.details || 'N/A') + '</p></div></div>';\n}\n\nconst testsHtml = tests.map(renderTest).join('');\n\nconst css = 'body{font-family:Arial,Helvetica,sans-serif;background:#f4f6f8;color:#222;margin:0;padding:20px;}' +\n  '.container{max-width:800px;margin:0 auto;background:#fff;border-radius:8px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.08);}' +\n  'h1{font-size:20px;margin-top:0;}' +\n  '.summary-text{background:#f0f4f8;padding:14px;border-radius:6px;margin-bottom:20px;line-height:1.5;}' +\n  '.counts{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}' +\n  '.count-box{flex:1;min-width:100px;text-align:center;padding:14px;border-radius:8px;color:#fff;font-weight:bold;}' +\n  '.count-success{background:#2ecc71;} .count-failed{background:#e74c3c;} .count-broken{background:#f39c12;}' +\n  '.filters{margin-bottom:16px;}' +\n  '.filters button{border:none;padding:8px 16px;margin-right:8px;border-radius:20px;cursor:pointer;font-size:13px;background:#e0e0e0;}' +\n  '.filters button.active{background:#2d3748;color:#fff;}' +\n  '.test-item{border-left:4px solid #ccc;margin-bottom:12px;padding:12px 14px;border-radius:6px;background:#fafafa;}' +\n  '.test-item[data-status=\"success\"]{border-color:#2ecc71;background:#eafaf1;}' +\n  '.test-item[data-status=\"failed\"]{border-color:#e74c3c;background:#fdecea;}' +\n  '.test-item[data-status=\"broken\"]{border-color:#f39c12;background:#fff7e6;}' +\n  '.test-header{display:flex;align-items:center;margin-bottom:6px;}' +\n  '.badge{padding:2px 10px;border-radius:12px;color:#fff;font-size:11px;margin-right:10px;text-transform:uppercase;}' +\n  '.badge-success{background:#2ecc71;} .badge-failed{background:#e74c3c;} .badge-broken{background:#f39c12;} .badge-unknown{background:#999;}' +\n  '.test-name{font-weight:bold;}' +\n  '.test-item.hidden{display:none;}';\n\nconst script = \"function filterTests(status){\" +\n  \"var items=document.querySelectorAll('.test-item');\" +\n  \"items.forEach(function(el){var s=el.getAttribute('data-status');\" +\n  \"if(status==='all'||s===status){el.classList.remove('hidden');}else{el.classList.add('hidden');}});\" +\n  \"var btns=document.querySelectorAll('.filters button');\" +\n  \"btns.forEach(function(b){b.classList.remove('active');if(b.getAttribute('data-filter')===status){b.classList.add('active');}});\" +\n  \"}\";\n\nconst html = '<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>' + css + '</style></head><body>' +\n  '<div class=\"container\"><h1>Regression Test Report</h1>' +\n  '<div class=\"summary-text\">' + esc(summary) + '</div>' +\n  '<div class=\"counts\">' +\n  '<div class=\"count-box count-success\">Success: ' + successCount + '</div>' +\n  '<div class=\"count-box count-failed\">Failed: ' + failedCount + '</div>' +\n  '<div class=\"count-box count-broken\">Broken: ' + brokenCount + '</div>' +\n  '</div>' +\n  '<div class=\"filters\">' +\n  '<button data-filter=\"all\" class=\"active\" onclick=\"filterTests(\\'all\\')\">All</button>' +\n  '<button data-filter=\"success\" onclick=\"filterTests(\\'success\\')\">Success</button>' +\n  '<button data-filter=\"failed\" onclick=\"filterTests(\\'failed\\')\">Failed</button>' +\n  '<button data-filter=\"broken\" onclick=\"filterTests(\\'broken\\')\">Broken</button>' +\n  '</div>' +\n  '<div class=\"tests\">' + testsHtml + '</div>' +\n  '</div>' +\n  '<script>' + script + '</script>' +\n  '</body></html>';\n\noutput = html;"
+        }
+      },
+      {
+        "id": "http-get-token",
+        "type": "http",
+        "data": {
+          "method": "POST",
+          "url": "https://login.microsoftonline.com/{{secret:TENANT_ID}}/oauth2/v2.0/token",
+          "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          "body": "grant_type=client_credentials&client_id={{secret:CLIENT_ID}}&client_secret={{secret:CLIENT_SECRET}}&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default"
+        }
+      },
+      {
+        "id": "js-mail-payload",
+        "type": "js",
+        "data": {
+          "input": {
+            "html": "{{node:js-build-html.output}}",
+            "counts": "{{node:js-parse-report.output.counts}}"
+          },
+          "code": "const counts = input.counts || {};\nconst dateStr = new Date().toISOString().slice(0,10);\nconst subject = 'Regression Test Report (' + dateStr + ') - Success: ' + (counts.success||0) + ', Failed: ' + (counts.failed||0) + ', Broken: ' + (counts.broken||0);\nconst payload = {\n  message: {\n    subject: subject,\n    body: { contentType: 'HTML', content: input.html },\n    toRecipients: [ { emailAddress: { address: 'Recipient@test.ai' } } ]\n  },\n  saveToSentItems: 'true'\n};\noutput = JSON.stringify(payload);"
+        }
+      },
+      {
+        "id": "http-send-mail",
+        "type": "http",
+        "data": {
+          "method": "POST",
+          "url": "https://graph.microsoft.com/v1.0/users/test@user.ai/sendMail",
+          "headers": {
+            "Authorization": "Bearer {{node:http-get-token.response.access_token}}",
+            "Content-Type": "application/json"
+          },
+          "body": "{{node:js-mail-payload.output}}"
         }
       },
       {
         "id": "output-1",
         "type": "output",
         "data": {
-          "result": "{{node:analyzer.response}}",
-          "tests count": "{{node:memory-search-1.count}}"
+          "summary": "{{node:js-parse-report.output.summary}}",
+          "counts": "{{node:js-parse-report.output.counts}}",
+          "email_status": "{{node:http-send-mail.status}}"
         }
       }
-    ],
-    "originalId": "6ac6046abd956bb7b64be6de"
+    ]
   },
   "dependencies": [
     {
+      "refId": "step_execution_v4",
       "name": "step_execution_v4",
       "description": "single test step execution tool",
       "nodes": [
@@ -353,10 +399,10 @@
             "Result_screenshot": "{{node:js-fix-baas-resp.output.screenshots.screenshot}}"
           }
         }
-      ],
-      "originalId": "6abfbce36d75534a7ac88237"
+      ]
     },
     {
+      "refId": "test-step-descriptor-v1",
       "name": "Test step descriptor v1",
       "description": "",
       "nodes": [
@@ -411,7 +457,7 @@
           "data": {
             "provider": "openai",
             "model": "gpt-4.1",
-            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Goal\n\nProduce an ordered array of test steps that, executed from the page in the screenshot, verifies the Task. Use the standard procedures (defined below) wherever a part of the work matches one, and write new steps only for parts that no procedure covers.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 0: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 1: Plan the sequence\n\nLook at the screenshot and break the Task into the ordered sequence of user actions needed to reach the state where the bug can be observed, and then to verify it. For example, verifying a bug inside a meeting usually requires starting the meeting first.\n\n- Start from the page shown in the screenshot.\n- Include only actions that are needed to set up and verify the Task. Do not add unrelated steps or cleanup steps unless the Task or Expectations call for them.\n\n## Step 2: Search standard procedures listed below\n\nFor each part of the plan that matches a procedure from Standard procedures , insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 3: IMPORTANT: You MUST Search memory for procedures\n\n Call the `memory_search` tool with:\n\n- collection: `procedures`\n- InitialPage: the page name you chose in Step 0\n\nYou MUST call this tool before producing next steps.  \nFor each part of the plan that matches a procedure from memory\\_search results, insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 4: Write new steps if you didnt find matching procedures\n\nWrite a step and expected result for each part of the plan that no procedure covers.\nEach new step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nEach expected result MUST describe an observable UI change, naming the specific element and its new state.\n\n## Step 5: Check the final step\n\nThe last step in the array (or the last steps, if several are needed) MUST verify the Expectations directly: its expected result must describe the observable UI change that confirms the bug is fixed.\n\n# Standard procedures\n\n## Procedure 1: Start an L10 meeting\n\nChoose exactly ONE option, based on what the screenshot shows. Never use both.\n**Option A**: use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the Task is to START a meeting. Produces 2 steps:\n\n1. Click 'Return to meeting'. Expected: the active L10 meeting page opens.\n2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further. Expected: the meeting is active and its timer is running.\n\n**Option B**: use this if 'Return to meeting' is NOT visible in the screenshot. Produces 3 steps:\n\n1. Click 'Meetings' in the main menu. Expected: intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible.\n2. Click 'Start the meeting' and wait. Expected: the meeting starts within 15 seconds.\n\n# General rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n- User with role 'facilitator' have displayed username 'Facilitator', email '[facilitator@test.it' and password 'FacilitatorPass'. This credentials are not secret!\n- User with role 'facilitator' have displayed username 'Member', email 'member@test.it' and password 'MemberPass'. This credentials are not secret!\n\n# Output format\n\nRespond with ONLY a single JSON array. Do not add any text, explanation, or markdown code fences before or after it.\nThe array contains one object per step, in execution order. Each object must have exactly these 3 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen after the action (for the final step, what should happen if the bug is fixed).\n- \"InitialPage\"(string): the page name you chose in Step 0\n- \"StepFromMemory\" (boolean): true if the step came from `memory_search`, otherwise false.\nThe output must be valid JSON: no trailing commas and no comments.\n\n# Examples\n\n## Bad (vague item, no visible change, and skips starting the meeting even though 'Return to meeting' is not visible)\n\n\\[{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}\\]\n\n## Good ('Return to meeting' is not visible in the screenshot, Task is about raising a to-do to IDS during a meeting)\n\n\\[  \n  {\"stepDescription\": \"Click 'Meetings' in the main menu\", \"stepExpectedResult\": \"The initial meeting page appears, showing an empty calendar\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true},  \n  {\"stepDescription\": \"Click 'Start L10' in the top right\", \"stepExpectedResult\": \"intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click 'Start the meeting' and wait\", \"stepExpectedResult\": \"The meeting starts within 15 seconds\", \"InitialPage\": \"My EOS\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}}  \n  \\]\n\n# Final reminders\n\nAlways call `memory_search` before answering \n\n- Use standard procedures wherever they apply, in full and in order; for Procedure 1, use exactly one option based on whether 'Return to meeting' is visible in the screenshot.\n- Every step needs both a specific action and an observable expected result.\n- Output only the JSON array and nothing else.\n\n",
+            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Goal\n\nProduce an ordered array of test steps that, executed from the page in the screenshot, verifies the Task. Use the standard procedures (defined below) wherever a part of the work matches one, and write new steps only for parts that no procedure covers.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 0: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 1: Plan the sequence\n\nLook at the screenshot and break the Task into the ordered sequence of user actions needed to reach the state where the bug can be observed, and then to verify it. For example, verifying a bug inside a meeting usually requires starting the meeting first.\n\n- Start from the page shown in the screenshot.\n- Include only actions that are needed to set up and verify the Task. Do not add unrelated steps or cleanup steps unless the Task or Expectations call for them.\n\n## Step 2: Search standard procedures listed below\n\nFor each part of the plan that matches a procedure from Standard procedures , insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 3: IMPORTANT: You MUST Search memory for procedures\n\n Call the `memory_search` tool with:\n\n- collection: `procedures`\n- InitialPage: the page name you chose in Step 0\n\nYou MUST call this tool before producing next steps.  \nFor each part of the plan that matches a procedure from memory\\_search results, insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 4: Write new steps if you didnt find matching procedures\n\nWrite a step and expected result for each part of the plan that no procedure covers.\nEach new step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nEach expected result MUST describe an observable UI change, naming the specific element and its new state.\n\n## Step 5: Check the final step\n\nThe last step in the array (or the last steps, if several are needed) MUST verify the Expectations directly: its expected result must describe the observable UI change that confirms the bug is fixed.\n\n# Standard procedures\n\n## Procedure 1: Start an L10 meeting\n\nChoose exactly ONE option, based on what the screenshot shows. Never use both.\n**Option A**: use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the Task is to START a meeting. Produces 2 steps:\n\n1. Click 'Return to meeting'. Expected: the active L10 meeting page opens.\n2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further. Expected: the meeting is active and its timer is running.\n\n**Option B**: use this if 'Return to meeting' is NOT visible in the screenshot. Produces 3 steps:\n\n1. Click 'Meetings' in the main menu. Expected: intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible.\n2. Click 'Start the meeting' and wait. Expected: the meeting starts within 15 seconds.\n\n# General rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n- User with role 'facilitator' have displayed username 'Facilitator', email 'facilitator@test.me' and password 'Facilitator123!'. This credentials are not secret!\n- User with role 'member' have displayed username 'Member', email 'member@test.me' and password 'Member123!. This credentials are not secret!\n\n# Output format\n\nRespond with ONLY a single JSON array. Do not add any text, explanation, or markdown code fences before or after it.\nThe array contains one object per step, in execution order. Each object must have exactly these 3 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen after the action (for the final step, what should happen if the bug is fixed).\n- \"InitialPage\"(string): the page name you chose in Step 0\n- \"StepFromMemory\" (boolean): true if the step came from `memory_search`, otherwise false.\nThe output must be valid JSON: no trailing commas and no comments.\n\n# Examples\n\n## Bad (vague item, no visible change, and skips starting the meeting even though 'Return to meeting' is not visible)\n\n\\[{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}\\]\n\n## Good ('Return to meeting' is not visible in the screenshot, Task is about raising a to-do to IDS during a meeting)\n\n\\[  \n  {\"stepDescription\": \"Click 'Meetings' in the main menu\", \"stepExpectedResult\": \"The initial meeting page appears, showing an empty calendar\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true},  \n  {\"stepDescription\": \"Click 'Start L10' in the top right\", \"stepExpectedResult\": \"intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click 'Start the meeting' and wait\", \"stepExpectedResult\": \"The meeting starts within 15 seconds\", \"InitialPage\": \"My EOS\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}}  \n  \\]\n\n# Final reminders\n\nAlways call `memory_search` before answering \n\n- Use standard procedures wherever they apply, in full and in order; for Procedure 1, use exactly one option based on whether 'Return to meeting' is visible in the screenshot.\n- Every step needs both a specific action and an observable expected result.\n- Output only the JSON array and nothing else.\n\n",
             "userPrompt": "<task> {{node:input-1.testStepDescription}}</task>\n<expectations> {{node:input-1.testStepExpectedResult}}</expectations>\n <screenshot>: {{node:js-2.output.screenshots.screenshot}} </screenshot>",
             "temperature": 0.7,
             "maxTokens": 10000,
@@ -444,12 +490,12 @@
             "maxMessages": 20,
             "maxToolCalls": 20,
             "maxTokens": 32000,
-            "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step once. If it’s still  'failed' or 'broken' or 'test\\_broken' after the rerun, stop test execution.",
+            "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step twice. If it’s still  'failed' or 'broken' or 'test\\_broken' after the second rerun, stop test execution.",
             "userPrompt": "SessionID: {{node:input-1.sessionID}}, Array of test steps: {{node:js-0.output}}",
             "tools": [
               {
                 "type": "agent",
-                "agentId": "6abfbce36d75534a7ac88237",
+                "agentId": "step_execution_v4",
                 "name": "step_execution_v4",
                 "description": "single test step execution tool",
                 "parameters": {
@@ -532,10 +578,10 @@
             "Result": "{{node:orchestrator.toolCalls}}"
           }
         }
-      ],
-      "originalId": "6ac4df4fbf1198b608a36011"
+      ]
     },
     {
+      "refId": "single-regression-test-runner",
       "name": "Single regression test runner",
       "description": "",
       "nodes": [
@@ -557,7 +603,7 @@
           }
         },
         {
-          "id": "http-0",
+          "id": "http-0-facilitator",
           "type": "http",
           "data": {
             "method": "POST",
@@ -570,7 +616,20 @@
           }
         },
         {
-          "id": "http-1",
+          "id": "http-0-member",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/start",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"browser\":{\"timeout\": \"2000s\"}, \"hold\": false}"
+          }
+        },
+        {
+          "id": "http-1-facilitator",
           "type": "http",
           "data": {
             "method": "POST",
@@ -579,7 +638,7 @@
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
             },
-            "body": "{\"program\":\"navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:http-0.response.result.sessionID}}\", \"stopSession\": false}",
+            "body": "{\"program\":\"navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:http-0-facilitator.response.result.sessionID}}\", \"stopSession\": false}",
             "persistedFields": [
               "body",
               "sseEvents",
@@ -588,10 +647,36 @@
           }
         },
         {
-          "id": "js-fix-id",
+          "id": "http-1-member",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/message",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+            },
+            "body": "{\"program\":\"navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:http-0-member.response.result.sessionID}}\", \"stopSession\": false}",
+            "persistedFields": [
+              "body",
+              "sseEvents",
+              "responseHeaders"
+            ]
+          }
+        },
+        {
+          "id": "js-fix-id-facilitator",
           "type": "js",
           "data": {
-            "input": "{{node:http-1.response}}",
+            "input": "{{node:http-1-facilitator.response}}",
+            "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
+          }
+        },
+        {
+          "id": "js-fix-id-member",
+          "type": "js",
+          "data": {
+            "input": "{{node:http-1-member.response}}",
             "code": "if (typeof input === 'string') { output = JSON.parse(input) } else { output = input };"
           }
         },
@@ -599,7 +684,7 @@
           "id": "memory-search-1",
           "type": "memory-search",
           "data": {
-            "collection": "regression_test_cases",
+            "collection": "regression_test_cases_parallel",
             "filters": {
               "testCaseName": "{{node:input-1.testCaseName}}"
             },
@@ -615,12 +700,12 @@
             "maxMessages": 0,
             "maxToolCalls": 20,
             "maxTokens": 32000,
-            "systemPrompt": "You are a test orchestrator. You get an array of test steps and an sessionID. Execute each step by calling the Test\\_step\\_descriptor tool. Wait for result before proceeding to next step. If the status of the last step in the result array is 'broken' or 'test\\_broken', try to rerun the step once. If the status of the last step  is still 'broken' or 'test\\_broken' after the rerun, stop test execution. If you get 'failed' status, stop test execution.",
-            "userPrompt": "<sessionID>{{node:js-fix-id.output.sessionID}}</sessionID><array of test steps> {{node:memory-search-1.records.0.steps}}</array of test steps> ",
+            "systemPrompt": "You are a test orchestrator for a multi-user regression test. You are given an array of test steps and two session IDs: facilitatorSessionID and memberSessionID. Each test step may include an 'actor' field with value 'facilitator' or 'member'. If a step's 'actor' field is missing, treat that step as belonging to the facilitator. Execute the steps strictly in the given array order (do not reorder or parallelize them yourself - order matters for interleaved multi-user scenarios). For each step, call the Test_step_descriptor tool, passing the sessionID that matches the step's actor (facilitatorSessionID for 'facilitator', memberSessionID for 'member'). Wait for the result before proceeding to the next step. If the status of the last step in the result array is 'broken' or 'test_broken', try to rerun that same step once. If the status is still 'broken' or 'test_broken' after the rerun, stop test execution. If you get a 'failed' status, stop test execution.",
+            "userPrompt": "<facilitatorSessionID>{{node:js-fix-id-facilitator.output.sessionID}}</facilitatorSessionID><memberSessionID>{{node:js-fix-id-member.output.sessionID}}</memberSessionID><array of test steps>{{node:memory-search-1.records.0.steps}}</array of test steps>",
             "tools": [
               {
                 "type": "agent",
-                "agentId": "6ac4df4fbf1198b608a36011",
+                "agentId": "test-step-descriptor-v1",
                 "name": "Test_step_descriptor",
                 "description": "single test step execution tool",
                 "parameters": {
@@ -628,15 +713,15 @@
                   "properties": {
                     "sessionID": {
                       "type": "string",
-                      "description": "SessionID, same value for all steps in one test. Requered."
+                      "description": "SessionID of the actor (facilitator or member) performing this step. Required."
                     },
                     "testStepDescription": {
                       "type": "string",
-                      "description": "Test step action description , plain text"
+                      "description": "Test step action description, plain text"
                     },
                     "testStepExpectedResult": {
                       "type": "string",
-                      "description": "Expexted result of the test step, plain text"
+                      "description": "Expected result of the test step, plain text"
                     }
                   },
                   "required": [
@@ -666,10 +751,18 @@
           }
         },
         {
-          "id": "{{node:memory-search-1.records.0.id}}",
+          "id": "js-final-result",
+          "type": "js",
+          "data": {
+            "input": "{{node:orchestrator.toolCalls}}",
+            "code": "function getLeafResult(call) {\n  if (!call) return null;\n  const res = call.result || call.output || {};\n  const nested = res.Result || res.result;\n  if (Array.isArray(nested) && nested.length > 0) {\n    return getLeafResult(nested[nested.length - 1]);\n  }\n  return res;\n}\n\nconst calls = Array.isArray(input) ? input : (input && input.toolCalls) || [];\nconst last = calls.length ? calls[calls.length - 1] : null;\nconst result = getLeafResult(last);\nreturn { result };"
+          }
+        },
+        {
+          "id": "memory-update",
           "type": "memory-update",
           "data": {
-            "collection": "regression_test_cases",
+            "collection": "regression_test_cases_parallel",
             "id": "{{node:memory-search-1.records.0.id}}",
             "data": {
               "status": "{{node:js-check-success.output.status}}",
@@ -679,34 +772,50 @@
           }
         },
         {
-          "id": "http-last",
+          "id": "http-last-facilitator",
           "type": "http",
           "data": {
             "method": "POST",
             "url": "http://host.docker.internal:8090/api/async/stop",
             "headers": {
               "Content-Type": "application/json",
-              "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
+              "X-Gate": "{{node:memory-update.success}}"
             },
-            "body": "{\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}"
+            "body": "{\"sessionID\":\"{{node:js-fix-id-facilitator.output.sessionID}}\"}"
+          }
+        },
+        {
+          "id": "http-last-member",
+          "type": "http",
+          "data": {
+            "method": "POST",
+            "url": "http://host.docker.internal:8090/api/async/stop",
+            "headers": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
+              "X-Gate": "{{node:memory-update.success}}"
+            },
+            "body": "{\"sessionID\":\"{{node:js-fix-id-member.output.sessionID}}\"}"
           }
         },
         {
           "id": "output-1",
           "type": "output",
           "data": {
-            "result": "{{node:orchestrator.toolCalls}}"
+            "result": "{{node:js-final-result.output.result}}",
+            "facilitatorSessionID": "{{node:js-fix-id-facilitator.output.sessionID}}",
+            "memberSessionID": "{{node:js-fix-id-member.output.sessionID}}"
           }
         }
-      ],
-      "originalId": "6ac54434d737deb76568ff8c"
+      ]
     }
   ],
   "collections": [
     {
-      "name": "regression_test_cases",
+      "name": "regression_test_cases_parallel",
       "schema": {
-        "description": null,
+        "description": "Regression test cases dedicated to agent 6ace2c3a3989889b5688ed72 (L10 multi-user/parallel facilitator+member runner)",
         "fields": [
           {
             "name": "status",
@@ -799,6 +908,15 @@
     }
   ],
   "secrets": [
+    {
+      "name": "TENANT_ID"
+    },
+    {
+      "name": "CLIENT_ID"
+    },
+    {
+      "name": "CLIENT_SECRET"
+    },
     {
       "name": "BAAS_API_KEY"
     }
