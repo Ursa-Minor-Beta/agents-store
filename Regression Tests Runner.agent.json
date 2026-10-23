@@ -1,8 +1,8 @@
 {
-  "version": "1.0",
-  "exportedAt": "2026-10-15T14:42:56.721Z",
+  "version": "1.1",
+  "exportedAt": "2026-10-23T11:02:15.066Z",
   "workspace": {
-    "name": "Regression",
+    "name": "2-browsers-regression",
     "description": ""
   },
   "agent": {
@@ -108,7 +108,7 @@
             "html": "{{node:js-build-html.output}}",
             "counts": "{{node:js-parse-report.output.counts}}"
           },
-          "code": "const counts = input.counts || {};\nconst dateStr = new Date().toISOString().slice(0,10);\nconst subject = 'Regression Test Report (' + dateStr + ') - Success: ' + (counts.success||0) + ', Failed: ' + (counts.failed||0) + ', Broken: ' + (counts.broken||0);\nconst payload = {\n  message: {\n    subject: subject,\n    body: { contentType: 'HTML', content: input.html },\n    toRecipients: [ { emailAddress: { address: 'Recipient@test.ai' } } ]\n  },\n  saveToSentItems: 'true'\n};\noutput = JSON.stringify(payload);"
+          "code": "const counts = input.counts || {};\nconst dateStr = new Date().toISOString().slice(0,10);\nconst subject = 'Regression Test Report (' + dateStr + ') - Success: ' + (counts.success||0) + ', Failed: ' + (counts.failed||0) + ', Broken: ' + (counts.broken||0);\nconst payload = {\n  message: {\n    subject: subject,\n    body: { contentType: 'HTML', content: input.html },\n    toRecipients: [ { emailAddress: { address: 'test@user.ai' } } ]\n  },\n  saveToSentItems: 'true'\n};\noutput = JSON.stringify(payload);"
         }
       },
       {
@@ -166,7 +166,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -191,7 +191,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "http://host.docker.internal:8090/api/async/actions",
+            "url": "https://host.docker.internal:8090/api/async/actions",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -304,7 +304,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -431,7 +431,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -487,7 +487,7 @@
           "data": {
             "provider": "openai",
             "model": "gpt-4.1",
-            "maxMessages": 20,
+            "maxMessages": 0,
             "maxToolCalls": 20,
             "maxTokens": 32000,
             "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step twice. If it’s still  'failed' or 'broken' or 'test\\_broken' after the second rerun, stop test execution.",
@@ -607,7 +607,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/start",
+            "url": "https://host.docker.internal:8090/api/async/start",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -620,7 +620,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/start",
+            "url": "https://host.docker.internal:8090/api/async/start",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -633,7 +633,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -651,7 +651,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -776,7 +776,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/stop",
+            "url": "https://host.docker.internal:8090/api/async/stop",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
@@ -790,7 +790,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/stop",
+            "url": "https://host.docker.internal:8090/api/async/stop",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
