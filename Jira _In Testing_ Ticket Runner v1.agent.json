@@ -1,11 +1,12 @@
 {
-  "version": "1.0",
-  "exportedAt": "2026-10-09T08:20:52.935Z",
+  "version": "1.1",
+  "exportedAt": "2026-10-23T11:06:18.777Z",
   "workspace": {
-    "name": "Jira_ticket_new",
+    "name": "Task_tester",
     "description": ""
   },
   "agent": {
+    "refId": "jira-\"in-testing\"-ticket-runner-v1",
     "name": "Jira \"In Testing\" Ticket Runner v1",
     "description": "Fetches Jira tickets assigned to me with status \"In Testing\" and runs the Jira Bug → Test Steps Runner sub-agent for each one, then summarizes the results.",
     "nodes": [
@@ -22,12 +23,7 @@
             "jiraEmail": {
               "type": "string",
               "required": false,
-              "default": "test@user.com"
-            },
-            "jiraHost": {
-              "type": "string",
-              "required": false,
-              "default": "https://something.atlassian.net"
+              "default": "test@user.ai"
             }
           }
         }
@@ -37,7 +33,7 @@
         "type": "http",
         "data": {
           "method": "GET",
-          "url": "{{node:input-1.jiraHost}}/rest/api/3/search/jql?jql=assignee%3DcurrentUser()%20AND%20status%3D%22In%20Testing%22&maxResults=40&fields=summary,status",
+          "url": "https://test.atlassian.net/rest/api/3/search/jql?jql=assignee%3DcurrentUser()%20AND%20status%3D%22In%20Testing%22&maxResults=40&fields=summary,status",
           "headers": {
             "Authorization": "Basic {{secret:Jira_auth}}",
             "Accept": "application/json"
@@ -66,7 +62,7 @@
           "tools": [
             {
               "type": "agent",
-              "agentId": "6ac4df8fbf1198b608a36017",
+              "agentId": "jira-bug-or-task-runner-v11",
               "name": "run_test_for_ticket",
               "description": "Runs the Jira Bug -> Test Steps Runner sub-agent against a given Jira issue to execute its test steps on a staging environment.",
               "parameters": {
@@ -101,11 +97,11 @@
           "summary": "{{node:llm-1.response}}"
         }
       }
-    ],
-    "originalId": "6ac543d3d737deb76568ff57"
+    ]
   },
   "dependencies": [
     {
+      "refId": "step_execution_v4",
       "name": "step_execution_v4",
       "description": "single test step execution tool",
       "nodes": [
@@ -134,7 +130,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -159,7 +155,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "http://host.docker.internal:8090/api/async/actions",
+            "url": "https://host.docker.internal:8090/api/async/actions",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -272,7 +268,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -367,10 +363,10 @@
             "Result_screenshot": "{{node:js-fix-baas-resp.output.screenshots.screenshot}}"
           }
         }
-      ],
-      "originalId": "6abfbce36d75534a7ac88237"
+      ]
     },
     {
+      "refId": "test-step-descriptor-v1",
       "name": "Test step descriptor v1",
       "description": "",
       "nodes": [
@@ -399,7 +395,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -425,7 +421,7 @@
           "data": {
             "provider": "openai",
             "model": "gpt-4.1",
-            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Goal\n\nProduce an ordered array of test steps that, executed from the page in the screenshot, verifies the Task. Use the standard procedures (defined below) wherever a part of the work matches one, and write new steps only for parts that no procedure covers.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 0: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 1: Plan the sequence\n\nLook at the screenshot and break the Task into the ordered sequence of user actions needed to reach the state where the bug can be observed, and then to verify it. For example, verifying a bug inside a meeting usually requires starting the meeting first.\n\n- Start from the page shown in the screenshot.\n- Include only actions that are needed to set up and verify the Task. Do not add unrelated steps or cleanup steps unless the Task or Expectations call for them.\n\n## Step 2: Search standard procedures listed below\n\nFor each part of the plan that matches a procedure from Standard procedures , insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 3: IMPORTANT: You MUST Search memory for procedures\n\n Call the `memory_search` tool with:\n\n- collection: `procedures`\n- InitialPage: the page name you chose in Step 0\n\nYou MUST call this tool before producing next steps.  \nFor each part of the plan that matches a procedure from memory\\_search results, insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 4: Write new steps if you didnt find matching procedures\n\nWrite a step and expected result for each part of the plan that no procedure covers.\nEach new step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nEach expected result MUST describe an observable UI change, naming the specific element and its new state.\n\n## Step 5: Check the final step\n\nThe last step in the array (or the last steps, if several are needed) MUST verify the Expectations directly: its expected result must describe the observable UI change that confirms the bug is fixed.\n\n# Standard procedures\n\n## Procedure 1: Start an L10 meeting\n\nChoose exactly ONE option, based on what the screenshot shows. Never use both.\n**Option A**: use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the Task is to START a meeting. Produces 2 steps:\n\n1. Click 'Return to meeting'. Expected: the active L10 meeting page opens.\n2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further. Expected: the meeting is active and its timer is running.\n\n**Option B**: use this if 'Return to meeting' is NOT visible in the screenshot. Produces 3 steps:\n\n1. Click 'Meetings' in the main menu. Expected: intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible.\n2. Click 'Start the meeting' and wait. Expected: the meeting starts within 15 seconds.\n\n# General rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n- User with role 'facilitator' have displayed username 'Facilitator', email '[facilitator@test.it](mailto:facilitator@test.it)' and password 'Facilitator123!'. This credentials are not secret!\n- User with role 'facilitator' have displayed username 'Member', email '[member@test.it](mailto:member@test.it)' and password 'Member123!. This credentials are not secret!\n\n# Output format\n\nRespond with ONLY a single JSON array. Do not add any text, explanation, or markdown code fences before or after it.\nThe array contains one object per step, in execution order. Each object must have exactly these 3 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen after the action (for the final step, what should happen if the bug is fixed).\n- \"InitialPage\"(string): the page name you chose in Step 0\n- \"StepFromMemory\" (boolean): true if the step came from `memory_search`, otherwise false.\nThe output must be valid JSON: no trailing commas and no comments.\n\n# Examples\n\n## Bad (vague item, no visible change, and skips starting the meeting even though 'Return to meeting' is not visible)\n\n\\[{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}\\]\n\n## Good ('Return to meeting' is not visible in the screenshot, Task is about raising a to-do to IDS during a meeting)\n\n\\[  \n  {\"stepDescription\": \"Click 'Meetings' in the main menu\", \"stepExpectedResult\": \"The initial meeting page appears, showing an empty calendar\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true},  \n  {\"stepDescription\": \"Click 'Start L10' in the top right\", \"stepExpectedResult\": \"intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click 'Start the meeting' and wait\", \"stepExpectedResult\": \"The meeting starts within 15 seconds\", \"InitialPage\": \"My EOS\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}}  \n  \\]\n\n# Final reminders\n\nAlways call `memory_search` before answering \n\n- Use standard procedures wherever they apply, in full and in order; for Procedure 1, use exactly one option based on whether 'Return to meeting' is visible in the screenshot.\n- Every step needs both a specific action and an observable expected result.\n- Output only the JSON array and nothing else.\n\n",
+            "systemPrompt": "# Role\n\nYou are an experienced QA engineer with deep knowledge of the EOS (Entrepreneurial Operating System) platform and L10 meetings.\n\n# Inputs\n\nYou will receive:\n\n1. **Task**: the behavior or bug to verify.\n2. **Expectations**: what should happen when the behavior works correctly (i.e., the bug is fixed).\n3. **Screenshot**: the page currently open in the EOS platform.\n\n# Goal\n\nProduce an ordered array of test steps that, executed from the page in the screenshot, verifies the Task. Use the standard procedures (defined below) wherever a part of the work matches one, and write new steps only for parts that no procedure covers.\n\n# Workflow\n\nFollow these steps in order. Do not skip any step.\n\n## Step 0: Identify the starting page\n\nLook at the screenshot and choose the page it shows. This is the initial page for the Page Object Pattern. You MUST choose exactly one value from this list, spelled exactly as written:\n\n- Login\n- My EOS\n- Meetings\n- Active Meeting-&gt;Segue\n- Active Meeting-&gt;Scorecard\n- Active Meeting-&gt;Rock review\n- Active Meeting-&gt;Headlines\n- Active Meeting-&gt;To-Dos\n- Active Meeting-&gt;IDS\n- Active Meeting-&gt;Conclude\n- Scorecard\n- Rocks\n- To-Dos\n- Issues\n- Headlines\n- Vision / Traction Organizer\n- Accountability Chart\n- Process\n- profile\n- Admin\n- Choose a company\n\nIf the screenshot is ambiguous, pick the page that best matches the main content.\n\n## Step 1: Plan the sequence\n\nLook at the screenshot and break the Task into the ordered sequence of user actions needed to reach the state where the bug can be observed, and then to verify it. For example, verifying a bug inside a meeting usually requires starting the meeting first.\n\n- Start from the page shown in the screenshot.\n- Include only actions that are needed to set up and verify the Task. Do not add unrelated steps or cleanup steps unless the Task or Expectations call for them.\n\n## Step 2: Search standard procedures listed below\n\nFor each part of the plan that matches a procedure from Standard procedures , insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 3: IMPORTANT: You MUST Search memory for procedures\n\n Call the `memory_search` tool with:\n\n- collection: `procedures`\n- InitialPage: the page name you chose in Step 0\n\nYou MUST call this tool before producing next steps.  \nFor each part of the plan that matches a procedure from memory\\_search results, insert that procedure's steps in full and in order.\n\n- Do not skip, merge, reorder, or reword the actions of a procedure, except to replace placeholders (shown in angle brackets) with exact values.\n- Fill placeholders with names from the Task or with text visible in the screenshot (e.g., an issue name). If the Task requires a new item, use a short, specific name (e.g., 'QA test issue 1') and use the same name in every later step that refers to it.\n\n## Step 4: Write new steps if you didnt find matching procedures\n\nWrite a step and expected result for each part of the plan that no procedure covers.\nEach new step MUST be specific and executable. It should:\n\n- Name the exact button, link, or control to click, using its visible label in single quotes (e.g., 'Raise Issue').\n- Name the exact item to act on, using the text visible in the screenshot (e.g., the 'make baas better' to-do).\n- State how many times to click or repeat an action if it is more than once.\n- State any values to type or options to select.\nEach expected result MUST describe an observable UI change, naming the specific element and its new state.\n\n## Step 5: Check the final step\n\nThe last step in the array (or the last steps, if several are needed) MUST verify the Expectations directly: its expected result must describe the observable UI change that confirms the bug is fixed.\n\n# Standard procedures\n\n## Procedure 1: Start an L10 meeting\n\nChoose exactly ONE option, based on what the screenshot shows. Never use both.\n**Option A**: use this if 'Return to meeting' (with a timer) IS visible in the screenshot, even if the Task is to START a meeting. Produces 2 steps:\n\n1. Click 'Return to meeting'. Expected: the active L10 meeting page opens.\n2. If a 'Resume' button appears, click it. If the meeting is already active, do nothing further. Expected: the meeting is active and its timer is running.\n\n**Option B**: use this if 'Return to meeting' is NOT visible in the screenshot. Produces 3 steps:\n\n1. Click 'Meetings' in the main menu. Expected: intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible.\n2. Click 'Start the meeting' and wait. Expected: the meeting starts within 15 seconds.\n\n# General rules\n\n- When a To-Do has been raised to IDS, its 'Raise Issue' button is replaced by an 'In IDS' button. Only the 'In IDS' button is visible for that To-Do.\n- User with role 'facilitator' have displayed username 'Facilitator', email 'facilitator@test.me' and password 'Facilitator123!'. This credentials are not secret!\n- User with role 'member' have displayed username 'Member', email 'member@test.me' and password 'Member123!. This credentials are not secret!\n\n# Output format\n\nRespond with ONLY a single JSON array. Do not add any text, explanation, or markdown code fences before or after it.\nThe array contains one object per step, in execution order. Each object must have exactly these 3 keys:\n\n- \"stepDescription\" (string): the action to perform.\n- \"stepExpectedResult\" (string): what should happen after the action (for the final step, what should happen if the bug is fixed).\n- \"InitialPage\"(string): the page name you chose in Step 0\n- \"StepFromMemory\" (boolean): true if the step came from `memory_search`, otherwise false.\nThe output must be valid JSON: no trailing commas and no comments.\n\n# Examples\n\n## Bad (vague item, no visible change, and skips starting the meeting even though 'Return to meeting' is not visible)\n\n\\[{\"stepDescription\": \"Click the 'Raise Issue' button on one of the to-dos\", \"stepExpectedResult\": \"The selected to-do is marked as raised to IDS\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}\\]\n\n## Good ('Return to meeting' is not visible in the screenshot, Task is about raising a to-do to IDS during a meeting)\n\n\\[  \n  {\"stepDescription\": \"Click 'Meetings' in the main menu\", \"stepExpectedResult\": \"The initial meeting page appears, showing an empty calendar\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true},  \n  {\"stepDescription\": \"Click 'Start L10' in the top right\", \"stepExpectedResult\": \"intro screen with one card in the middle of the page appears and the 'Start the meeting' button is visible\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click 'Start the meeting' and wait\", \"stepExpectedResult\": \"The meeting starts within 15 seconds\", \"InitialPage\": \"My EOS\", \"InitialPage\": \"My EOS\", \"StepFromMemory\": true}},  \n  {\"stepDescription\": \"Click the 'Raise Issue' button on the 'make baas better' to-do once\", \"stepExpectedResult\": \"The 'make baas better' to-do shows an 'In IDS' button and the 'Raise Issue' button is no longer visible\", \"InitialPage\": \"My EOS\",  \"StepFromMemory\": true}}  \n  \\]\n\n# Final reminders\n\nAlways call `memory_search` before answering \n\n- Use standard procedures wherever they apply, in full and in order; for Procedure 1, use exactly one option based on whether 'Return to meeting' is visible in the screenshot.\n- Every step needs both a specific action and an observable expected result.\n- Output only the JSON array and nothing else.\n\n",
             "userPrompt": "<task> {{node:input-1.testStepDescription}}</task>\n<expectations> {{node:input-1.testStepExpectedResult}}</expectations>\n <screenshot>: {{node:js-2.output.screenshots.screenshot}} </screenshot>",
             "temperature": 0.7,
             "maxTokens": 10000,
@@ -455,15 +451,15 @@
           "data": {
             "provider": "openai",
             "model": "gpt-4.1",
-            "maxMessages": 20,
+            "maxMessages": 0,
             "maxToolCalls": 20,
             "maxTokens": 32000,
-            "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step once. If it’s still  'failed' or 'broken' or 'test\\_broken' after the rerun, stop test execution.",
+            "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step twice. If it’s still  'failed' or 'broken' or 'test\\_broken' after the second rerun, stop test execution.",
             "userPrompt": "SessionID: {{node:input-1.sessionID}}, Array of test steps: {{node:js-0.output}}",
             "tools": [
               {
                 "type": "agent",
-                "agentId": "6abfbce36d75534a7ac88237",
+                "agentId": "step_execution_v4",
                 "name": "step_execution_v4",
                 "description": "single test step execution tool",
                 "parameters": {
@@ -546,10 +542,10 @@
             "Result": "{{node:orchestrator.toolCalls}}"
           }
         }
-      ],
-      "originalId": "6ac4df4fbf1198b608a36011"
+      ]
     },
     {
+      "refId": "jira-bug-or-task-runner-v11",
       "name": "Jira Bug or Task Runner v11",
       "description": "",
       "nodes": [
@@ -570,12 +566,7 @@
               "jiraEmail": {
                 "type": "string",
                 "required": false,
-                "default": "test@user.com"
-              },
-              "jiraHost": {
-                "type": "string",
-                "required": false,
-                "default": "https://something.atlassian.net"
+                "default": "test@user.ai"
               }
             }
           }
@@ -585,7 +576,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/start",
+            "url": "https://host.docker.internal:8090/api/async/start",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -598,7 +589,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/message",
+            "url": "https://host.docker.internal:8090/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -624,7 +615,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}",
+            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json"
@@ -640,7 +631,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json"
@@ -738,7 +729,7 @@
             "tools": [
               {
                 "type": "agent",
-                "agentId": "6ac4df4fbf1198b608a36011",
+                "agentId": "test-step-descriptor-v1",
                 "name": "Test_step_descriptor",
                 "description": "single test step execution tool",
                 "parameters": {
@@ -840,7 +831,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Content-Type": "application/json",
@@ -859,7 +850,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json",
@@ -884,7 +875,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Content-Type": "application/json",
@@ -903,7 +894,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "http://host.docker.internal:8090/api/async/stop",
+            "url": "https://host.docker.internal:8090/api/async/stop",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
@@ -928,8 +919,7 @@
             "result": "{{node:orchestrator.toolCalls}}"
           }
         }
-      ],
-      "originalId": "6ac4df8fbf1198b608a36017"
+      ]
     }
   ],
   "collections": [
@@ -954,7 +944,7 @@
           },
           {
             "name": "steps",
-            "type": "array",
+            "type": "string",
             "required": true,
             "index": false,
             "description": ""
@@ -1014,7 +1004,7 @@
             "name": "program",
             "type": "string",
             "required": true,
-            "index": false,
+            "index": true,
             "description": ""
           },
           {
