@@ -1,8 +1,8 @@
 {
-  "version": "1.1",
-  "exportedAt": "2026-10-23T11:06:18.777Z",
+  "version": "1.0",
+  "exportedAt": "2026-10-28T11:20:31.036Z",
   "workspace": {
-    "name": "Task_tester",
+    "name": "Task_tester (1)",
     "description": ""
   },
   "agent": {
@@ -24,6 +24,16 @@
               "type": "string",
               "required": false,
               "default": "test@user.ai"
+            },
+            "jiraHost": {
+              "type": "string",
+              "required": false,
+              "default": "https://test.atlassian.net"
+            },
+            "baasHost": {
+              "type": "string",
+              "required": false,
+              "default": "https://host.docker.internal:8090"
             }
           }
         }
@@ -33,7 +43,7 @@
         "type": "http",
         "data": {
           "method": "GET",
-          "url": "https://test.atlassian.net/rest/api/3/search/jql?jql=assignee%3DcurrentUser()%20AND%20status%3D%22In%20Testing%22&maxResults=40&fields=summary,status",
+          "url": "{{node:input-1.jiraHost}}/rest/api/3/search/jql?jql=assignee%3DcurrentUser()%20AND%20status%3D%22In%20Testing%22&maxResults=40&fields=summary,status",
           "headers": {
             "Authorization": "Basic {{secret:Jira_auth}}",
             "Accept": "application/json"
@@ -55,7 +65,7 @@
           "provider": "openai",
           "model": "gpt-4.1",
           "systemPrompt": "You are an orchestrator that processes a list of Jira tickets. For each ticket in the provided list, call the run_test_for_ticket tool exactly once, passing the ticket's key as jiraId along with the given url and jiraEmail. Process tickets one by one, just one at a time, waiting for each tool result before moving to the next. Once all tickets have been processed, produce a clear summary report listing each ticket key and the outcome returned by the tool. If the list is empty, simply report that there are no tickets in 'In Testing' status.",
-          "userPrompt": "Jira tickets to test (JSON array of {key, summary}):\n{{node:js-1.output}}\n\nFor every ticket in the list above, call the tool `run_test_for_ticket` with:\n- jiraId: the ticket's key\n- url: {{node:input-1.url}}\n- jiraEmail: {{node:input-1.jiraEmail}}\n\nAfter processing all tickets, respond with a concise summary of results per ticket.",
+          "userPrompt": "Jira tickets to test (JSON array of {key, summary}):\n{{node:js-1.output}}\n\nFor every ticket in the list above, call the tool `run_test_for_ticket` with:\n- jiraId: the ticket's key\n- url: {{node:input-1.url}}\n- jiraEmail: {{node:input-1.jiraEmail}}\n- jiraHost: {{node:input-1.jiraHost}}\n- baasHost: {{node:input-1.baasHost}}\n\nAfter processing all tickets, respond with a concise summary of results per ticket.",
           "temperature": 0.2,
           "maxTokens": 32000,
           "maxToolCalls": 50,
@@ -79,10 +89,20 @@
                   "jiraEmail": {
                     "type": "string",
                     "description": "Jira account email to associate with the run"
+                  },
+                  "baasHost": {
+                    "type": "string",
+                    "description": "BAAS host"
+                  },
+                  "jiraHost": {
+                    "type": "string",
+                    "description": "JIRA host"
                   }
                 },
                 "required": [
-                  "jiraId"
+                  "jiraId",
+                  "baasHost",
+                  "jiraHost"
                 ]
               }
             }
@@ -97,7 +117,36 @@
           "summary": "{{node:llm-1.response}}"
         }
       }
-    ]
+    ],
+    "editorData": {
+      "nodePositions": {
+        "input-1": {
+          "x": 223.7220329167105,
+          "y": -110.83314035198643
+        },
+        "http-1": {
+          "x": 413.1109751052095,
+          "y": 30.611057811501013
+        },
+        "js-1": {
+          "x": 413.94411545719595,
+          "y": 138.44442974110373
+        },
+        "llm-1": {
+          "x": 316.833173434503,
+          "y": 266.3333223058278
+        },
+        "output-1": {
+          "x": 393.8885948220746,
+          "y": 458.61099164646777
+        }
+      },
+      "viewport": {
+        "x": 408.9110967477728,
+        "y": 247.93918829640006,
+        "zoom": 0.9473700705992681
+      }
+    }
   },
   "dependencies": [
     {
@@ -121,6 +170,10 @@
               "testStepExpectedResult": {
                 "type": "string",
                 "required": true
+              },
+              "baasHost": {
+                "type": "string",
+                "required": true
               }
             }
           }
@@ -130,7 +183,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/message",
+            "url": "{{node:input-1.baasHost}}/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -155,7 +208,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "https://host.docker.internal:8090/api/async/actions",
+            "url": "{{node:input-1.baasHost}}/api/async/actions",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -268,7 +321,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/message",
+            "url": "{{node:input-1.baasHost}}/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -363,7 +416,92 @@
             "Result_screenshot": "{{node:js-fix-baas-resp.output.screenshots.screenshot}}"
           }
         }
-      ]
+      ],
+      "editorData": {
+        "nodePositions": {
+          "input-1": {
+            "x": -195,
+            "y": -178
+          },
+          "http-1": {
+            "x": -430.87705849191246,
+            "y": -41.2923528306375
+          },
+          "js-2": {
+            "x": -427,
+            "y": 84
+          },
+          "http-2": {
+            "x": -597,
+            "y": 532
+          },
+          "llm-0": {
+            "x": -344.57559853964403,
+            "y": 221.6039074233903
+          },
+          "js-0": {
+            "x": -344.97567828297855,
+            "y": 336.0047846000698
+          },
+          "branch-deside": {
+            "x": -344.1755187963096,
+            "y": 476.0043858833973
+          },
+          "memory-search-1": {
+            "x": 82.58596517312856,
+            "y": 630.5127307349356
+          },
+          "js-extract-program": {
+            "x": 78.98484876644562,
+            "y": 789.2014353800209
+          },
+          "llm-1": {
+            "x": -511.42503595449455,
+            "y": 676.7857214044473
+          },
+          "js-1": {
+            "x": -516.163557296135,
+            "y": 803.37770665626
+          },
+          "http-3": {
+            "x": 183.3841310764352,
+            "y": 942
+          },
+          "js-fix-baas-resp": {
+            "x": 176.18429056310424,
+            "y": 1055.6007176900105
+          },
+          "llm-2": {
+            "x": 277.6101792872694,
+            "y": 1202.6834370463305
+          },
+          "js-3": {
+            "x": 274.83894610991433,
+            "y": 1334.2833573029961
+          },
+          "branch-delete": {
+            "x": 275.1223034129107,
+            "y": 1487.7166426970036
+          },
+          "memory-store-1": {
+            "x": -223.72489213651642,
+            "y": 1653.6574584406333
+          },
+          "memory-delete-1": {
+            "x": -38.11693033295984,
+            "y": 1695.107242713666
+          },
+          "output-1": {
+            "x": 390.0550052047523,
+            "y": 1658.9980562562216
+          }
+        },
+        "viewport": {
+          "x": 568.8254320547677,
+          "y": -40.818449594628305,
+          "zoom": 0.5
+        }
+      }
     },
     {
       "refId": "test-step-descriptor-v1",
@@ -386,6 +524,10 @@
               "testStepExpectedResult": {
                 "type": "string",
                 "required": true
+              },
+              "baasHost": {
+                "type": "string",
+                "required": true
               }
             }
           }
@@ -395,7 +537,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/message",
+            "url": "{{node:input-1.baasHost}}/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -455,7 +597,7 @@
             "maxToolCalls": 20,
             "maxTokens": 32000,
             "systemPrompt": "You are a test orchestrator. You get a sessionID and an array of test steps, expected and results. Execute each step by calling the step\\_execution tool. Use same sessionIDs for each test step execution. Wait for result before proceeding to next step. If the status in the result is 'failed' or 'broken' or 'test\\_broken', try to rerun the step twice. If it’s still  'failed' or 'broken' or 'test\\_broken' after the second rerun, stop test execution.",
-            "userPrompt": "SessionID: {{node:input-1.sessionID}}, Array of test steps: {{node:js-0.output}}",
+            "userPrompt": "SessionID: {{node:input-1.sessionID}}, baasHost: {{node:input-1.baasHost}}. Array of test steps: {{node:js-0.output}}",
             "tools": [
               {
                 "type": "agent",
@@ -476,12 +618,17 @@
                     "testStepExpectedResult": {
                       "type": "string",
                       "description": "Expexted result of the test step, plain text"
+                    },
+                    "baasHost": {
+                      "type": "string",
+                      "description": "BAAS host"
                     }
                   },
                   "required": [
                     "sessionID",
                     "testStepDescription",
-                    "testStepExpectedResult"
+                    "testStepExpectedResult",
+                    "baasHost"
                   ]
                 }
               }
@@ -542,7 +689,56 @@
             "Result": "{{node:orchestrator.toolCalls}}"
           }
         }
-      ]
+      ],
+      "editorData": {
+        "nodePositions": {
+          "input-1": {
+            "x": -128.82035185138434,
+            "y": 184.6607410690485
+          },
+          "http-1": {
+            "x": 14.745094629740734,
+            "y": 328.3142685599522
+          },
+          "js-2": {
+            "x": 14.805581116204579,
+            "y": 466.2297890617528
+          },
+          "llm-0": {
+            "x": 194.696098979571,
+            "y": 385.8676498608505
+          },
+          "js-0": {
+            "x": 196.07354902595412,
+            "y": 518.622549953617
+          },
+          "orchestrator": {
+            "x": 371.09275749768165,
+            "y": 750.5666550316195
+          },
+          "js-check-steps": {
+            "x": 181.86170981597348,
+            "y": 678.6818381998314
+          },
+          "branch-save": {
+            "x": 31.191602489905748,
+            "y": 824.8871139893597
+          },
+          "memory-store-1": {
+            "x": -101.6224125104924,
+            "y": 979.7043620892844
+          },
+          "output-1": {
+            "x": 427.4848694830436,
+            "y": 983.6830873798231
+          }
+        },
+        "viewport": {
+          "x": 398.36479590436625,
+          "y": -45.20101771542477,
+          "zoom": 0.8133791981321289
+        }
+      }
     },
     {
       "refId": "jira-bug-or-task-runner-v11",
@@ -567,6 +763,16 @@
                 "type": "string",
                 "required": false,
                 "default": "test@user.ai"
+              },
+              "baasHost": {
+                "type": "string",
+                "required": false,
+                "default": "https://host.docker.internal:8090"
+              },
+              "jiraHost": {
+                "type": "string",
+                "required": false,
+                "default": "https://test.atlassian.net"
               }
             }
           }
@@ -576,7 +782,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/start",
+            "url": "{{node:input-1.baasHost}}/api/async/start",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
@@ -589,17 +795,23 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/message",
+            "url": "{{node:input-1.baasHost}}/api/async/message",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}"
             },
-            "body": "{\"program\":\"navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');\", \"sessionID\": \"{{node:http-0.response.result.sessionID}}\", \"stopSession\": false}",
+            "body": {
+              "program": "navigate('{{node:input-1.url}}'); sleep('3s'); takeScreenshot('screenshot', 'timeout:10s');",
+              "sessionID": "{{node:http-0.response.result.sessionID}}",
+              "timeout": "60s",
+              "stopSession": false
+            },
             "persistedFields": [
               "body",
               "sseEvents",
               "responseHeaders"
-            ]
+            ],
+            "timeout": 60000
           }
         },
         {
@@ -615,7 +827,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json"
@@ -631,7 +843,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json"
@@ -664,7 +876,7 @@
           "data": {
             "provider": "openai",
             "model": "gpt-4.1",
-            "systemPrompt": "You are a senior QA engineer with deep expertise in EOS and Level 10 (L10) meetings.\n\nTASK\nGiven a ticket's summary, description, comments, and a screenshot of the initial page, decide whether the ticket can be tested manually in this application. A ticket may describe either a bug fix or a new feature. If it can be tested, produce a concise, ordered list of manual test steps needed to verify the ticket: for a bug, confirm it is fixed; for a feature, confirm it works as described.\n\nDECISION 1 — Should this ticket be processed?\nBefore writing any steps, decide whether the ticket can be verified through manual UI testing using only the Facilitator or Member account in this application.\nSet \"processTask\" to false if ANY of the following is true:\n\n- Testing requires logging in to or using an external/third-party service (e.g. Google, Microsoft, Slack, email inbox, payment provider).\n- Testing requires an account or role other than Facilitator or Member (e.g. admin, owner, billing, support).\n- The ticket is backend-only, API-only, infrastructure, performance, or otherwise not observable in the UI.\n- Testing requires special hardware, a specific device, a specific browser extension, or a mobile app.\n- The ticket description is too vague or contradictory to derive concrete test steps, even with the comments.\n- Testing requires data, configuration, or environment setup that cannot be created through the UI.\nIf \"processTask\" is false, give a short, specific reason (one sentence) and return an empty \"testCase\" array.\nIf \"processTask\" is true, set \"reason\" to an empty string \"\".\n\nDECISION 2 — Which account should be used?\nChoose exactly ONE account: Facilitator or Member.\n\n- Choose Facilitator if the ticket involves actions only a meeting facilitator can perform (e.g. starting, resuming, or concluding an L10 meeting, managing participants or presence, moving through meeting sections), or if the ticket text explicitly mentions the facilitator role.\n- Choose Member if the ticket text explicitly mentions a regular member/participant, or if there is not enough information to decide.\n\nDECISION 3 — Should logout first?  \nIf you are logged in with wrong user account - the first step of the test should be following.\n\n- stepDescription: \"Log out\"\n- stepExpectedResult: \"SignIn screen available\"\n\nDECISION 4 — Should I login?\n\nIf you are on the SignIn screen or if your previous step was Log Out - the step of the test should be following.\n\n- stepDescription is one of following: \"Log in as Member\" or \"Log in as Facilitator\"\n- stepExpectedResult: \"Login successful\"\n\nDECISION 5 — Is an L10 meeting needed?  \nDecide whether testing the ticket requires an active L10 meeting. If it does, use Procedure 1 to start or return to a meeting. If it does not, do not start a meeting.\n\nGENERAL RULES\n\n- Be as specific as possible: name exact buttons, menu items, icons, and labels to click.\n- Dont make 'Navigate to the L10 meeting' as a separate step. `Start meeting` step is enough.  \n- Each test step must contain exactly ONE user action.\n- The application has a single-level main menu, with tabs within each section.\n- If an action must be repeated N times, write N separate steps. Never use the word \"Repeat\" inside a step.\n- Steps are executed independently — never reference or assume completion of a previous step within a step's text.\n- Use the ticket comments as additional context: they may contain clarifications, reproduction details, root cause notes, acceptance criteria, or confirmation of the fix or implementation that are not present in the original description.\n\nOUTPUT FORMAT — STRICT\nRespond with ONLY a single valid JSON object. No markdown, no code fences, no commentary before or after — your entire response must be parseable as JSON.\nThe object must have exactly these 3 keys, in this exact order:\n\n- \"processTask\": boolean — true if the ticket can be tested manually, false otherwise.\n- \"reason\": string — empty string \"\" when processTask is true; a short, specific explanation when processTask is false.\n- \"testCaseName\": string — name teat cases clear, so it’s easy to navigate.\n- \"testCase\": array — the ordered test steps when processTask is true (the first step must be the login step); an empty array \\[\\[\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]\\]\\] when processTask is false.\n\nEach element of \"testCase\" is an object with exactly these 3 keys, in this exact order:\n\n- \"stepDescription\": string — the action to perform.\n- \"stepExpectedResult\": string — what should happen if the ticket is implemented correctly (the bug is fixed or the feature works as described).\n- \"sessionID\": the id string {{node:js-fix-id.output.sessionID}} — copy it unchanged into every object; never generate, alter, or infer a value for it.\n\nExample output when the ticket is processed:  \n{\"processTask\":true,\"reason\":\"\", \"testCaseName\":\"Meeting start as s member\", \"testCase\":\\[{\"stepDescription\":\"Log in as Member\",\"stepExpectedResult\":\"Login successful\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"},{\"stepDescription\":\"Start L10 meeting\",\"stepExpectedResult\":\"L10 meeting started\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}\\]}\n\nExample output when the ticket is not processed:  \n{\"processTask\":false,\"reason\":\"Need to log in to Google to test it\", \"testCaseName\":\"SignIn with google account\", \"testCase\":\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]}\n\nREMINDER: Output only the JSON object. No text before or after it.",
+            "systemPrompt": "You are a senior QA engineer with deep expertise in EOS and Level 10 (L10) meetings.\n\nTASK\nGiven a ticket's summary, description, comments, and a screenshot of the initial page, decide whether the ticket can be tested manually in this application. A ticket may describe either a bug fix or a new feature. If it can be tested, produce a concise, ordered list of manual test steps needed to verify the ticket: for a bug, confirm it is fixed; for a feature, confirm it works as described.\n\nDECISION 1 — Should this ticket be processed?\nBefore writing any steps, decide whether the ticket can be verified through manual UI testing using only the Facilitator or Member account in this application.\nSet \"processTask\" to false if ANY of the following is true:\n\n- Testing requires logging in to or using an external/third-party service (e.g. Google, Microsoft, Slack, email inbox, payment provider).\n- Testing requires an account or role other than Facilitator or Member (e.g. admin, owner, billing, support).\n- The ticket is backend-only, API-only, infrastructure, performance, or otherwise not observable in the UI.\n- Testing requires special hardware, a specific device, a specific browser extension, or a mobile app.\n- The ticket description is too vague or contradictory to derive concrete test steps, even with the comments.\n- Testing requires data, configuration, or environment setup that cannot be created through the UI.\nIf \"processTask\" is false, give a short, specific reason (one sentence) and return an empty \"testCase\" array.\nIf \"processTask\" is true, set \"reason\" to an empty string \"\".\n\nDECISION 2 — Which account should be used?\nChoose exactly ONE account: Facilitator or Member.\n\n- Choose Facilitator if the ticket involves actions only a meeting facilitator can perform (e.g. starting, resuming, or concluding an L10 meeting, managing participants or presence, moving through meeting sections), or if the ticket text explicitly mentions the facilitator role.\n- Choose Member if the ticket text explicitly mentions a regular member/participant, or if there is not enough information to decide.\n\nDECISION 3 — Should logout first?  \nIf you are logged in with wrong user account - the first step of the test should be following.\n\n- stepDescription: \"Log out\"\n- stepExpectedResult: \"SignIn screen available\"\n\nDECISION 4 — Should I login?\n\nIf you are on the SignIn screen or if your previous step was Log Out - the step of the test should be following.\n\n- stepDescription is one of following: \"Log in as Member\" or \"Log in as Facilitator\"\n- stepExpectedResult: \"Login successful\"\n\nDECISION 5 — Is an L10 meeting needed?  \nDecide whether testing the ticket requires an active L10 meeting. If it does, use Procedure 1 to start or return to a meeting. If it does not, do not start a meeting.\n\nGENERAL RULES\n\n- Be as specific as possible: name exact buttons, menu items, icons, and labels to click.\n- Dont make 'Navigate to the L10 meeting' as a separate step. `Start meeting` step is enough.  \n- Each test step must contain exactly ONE user action.\n- The application has a single-level main menu, with tabs within each section.\n- If an action must be repeated N times, write N separate steps. Never use the word \"Repeat\" inside a step.\n- Steps are executed independently — never reference or assume completion of a previous step within a step's text.\n- Use the ticket comments as additional context: they may contain clarifications, reproduction details, root cause notes, acceptance criteria, or confirmation of the fix or implementation that are not present in the original description.\n\nOUTPUT FORMAT — STRICT\nRespond with ONLY a single valid JSON object. No markdown, no code fences, no commentary before or after — your entire response must be parseable as JSON.\nThe object must have exactly these 3 keys, in this exact order:\n\n- \"processTask\": boolean — true if the ticket can be tested manually, false otherwise.\n- \"reason\": string — empty string \"\" when processTask is true; a short, specific explanation when processTask is false.\n- \"testCaseName\": string — name teat cases clear, so it’s easy to navigate.\n- \"testCase\": array — the ordered test steps when processTask is true (the first step must be the login step); an empty array \\[\\[\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]\\]\\] when processTask is false.\n\nEach element of \"testCase\" is an object with exactly these 4 keys, in this exact order:\n\n- \"stepDescription\": string — the action to perform.\n- \"stepExpectedResult\": string — what should happen if the ticket is implemented correctly (the bug is fixed or the feature works as described).\n- \"sessionID\": the id string {{node:js-fix-id.output.sessionID}} — copy it unchanged into every object; never generate, alter, or infer a value for it.\n- \"baasHost\": {{node:input-1.baasHost}} - baas service host\n\nExample output when the ticket is processed:  \n{\"processTask\":true,\"reason\":\"\", \"testCaseName\":\"Meeting start as s member\", \"testCase\":\\[{\"stepDescription\":\"Log in as Member\",\"stepExpectedResult\":\"Login successful\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"},{\"stepDescription\":\"Start L10 meeting\",\"stepExpectedResult\":\"L10 meeting started\",\"sessionID\":\"{{node:js-fix-id.output.sessionID}}\"}\\]}\n\nExample output when the ticket is not processed:  \n{\"processTask\":false,\"reason\":\"Need to log in to Google to test it\", \"testCaseName\":\"SignIn with google account\", \"testCase\":\\[\\[\\[\\[\\[\\[\\]\\]\\]\\]\\]\\]}\n\nREMINDER: Output only the JSON object. No text before or after i",
             "userPrompt": "Bug Summary: {{node:js-extract-desc.output.summary}}\n\nBug Description:\n{{node:js-extract-desc.output.description}}\n\nBug Comments:\n{{node:js-extract-comment.output}}\n\nFirst page screenshot:\n{{node:js-fix-id.output.screenshots.screenshot}}\n\nGenerate the test steps JSON array now.",
             "temperature": 0.3,
             "maxTokens": 32000
@@ -746,12 +958,17 @@
                     "testStepExpectedResult": {
                       "type": "string",
                       "description": "Expexted result of the test step, plain text"
+                    },
+                    "baasHost": {
+                      "type": "string",
+                      "description": "BAAS host"
                     }
                   },
                   "required": [
                     "sessionID",
                     "testStepDescription",
-                    "testStepExpectedResult"
+                    "testStepExpectedResult",
+                    "baasHost"
                   ]
                 }
               }
@@ -831,7 +1048,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/comment",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Content-Type": "application/json",
@@ -850,7 +1067,7 @@
           "type": "http",
           "data": {
             "method": "GET",
-            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Accept": "application/json",
@@ -875,7 +1092,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://test.atlassian.net/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
+            "url": "{{node:input-1.jiraHost}}/rest/api/2/issue/{{node:input-1.jiraId}}/transitions",
             "headers": {
               "Authorization": "Basic {{secret:Jira_auth}}",
               "Content-Type": "application/json",
@@ -894,7 +1111,7 @@
           "type": "http",
           "data": {
             "method": "POST",
-            "url": "https://host.docker.internal:8090/api/async/stop",
+            "url": "{{node:input-1.baasHost}}/api/async/stop",
             "headers": {
               "Content-Type": "application/json",
               "Authorization": "Bearer {{secret:BAAS_API_KEY}}",
@@ -919,7 +1136,112 @@
             "result": "{{node:orchestrator.toolCalls}}"
           }
         }
-      ]
+      ],
+      "editorData": {
+        "nodePositions": {
+          "input-1": {
+            "x": 149.51047678832697,
+            "y": -154.93766141425942
+          },
+          "http-0": {
+            "x": 61.79205875907827,
+            "y": -25.882857591245212
+          },
+          "http-1": {
+            "x": -29.510476788326955,
+            "y": 104.11714240875479
+          },
+          "js-fix-id": {
+            "x": -30.94841332117391,
+            "y": 218.29984054743827
+          },
+          "http-jira": {
+            "x": 225,
+            "y": 130
+          },
+          "http-jira-comments": {
+            "x": 445,
+            "y": 130
+          },
+          "js-extract-desc": {
+            "x": 225,
+            "y": 260
+          },
+          "js-extract-comment": {
+            "x": 445,
+            "y": 260
+          },
+          "llm-generate-steps": {
+            "x": 225,
+            "y": 390
+          },
+          "js-steps": {
+            "x": 225,
+            "y": 520
+          },
+          "branch-process": {
+            "x": 115,
+            "y": 650
+          },
+          "orchestrator": {
+            "x": 225,
+            "y": 780
+          },
+          "js-build-comment": {
+            "x": 115,
+            "y": 910
+          },
+          "js-check-success": {
+            "x": 335,
+            "y": 910
+          },
+          "branch-success": {
+            "x": 225,
+            "y": 1040
+          },
+          "js-clean-steps": {
+            "x": 335,
+            "y": 650
+          },
+          "memory-store-test": {
+            "x": -325,
+            "y": 1170
+          },
+          "http-jira-comment": {
+            "x": -105,
+            "y": 1170
+          },
+          "http-jira-transitions": {
+            "x": 115,
+            "y": 1170
+          },
+          "js-find-transition": {
+            "x": 225,
+            "y": 1300
+          },
+          "http-jira-set-done": {
+            "x": 225,
+            "y": 1430
+          },
+          "http-last": {
+            "x": 335,
+            "y": 1170
+          },
+          "js-prepare-output": {
+            "x": 555,
+            "y": 1170
+          },
+          "output-1": {
+            "x": 775,
+            "y": 1170
+          }
+        },
+        "viewport": {
+          "x": 615.9932684612309,
+          "y": 223.56763943419992,
+          "zoom": 0.6954409858549945
+        }
+      }
     }
   ],
   "collections": [
